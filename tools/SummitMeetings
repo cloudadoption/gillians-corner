@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Summit 2026 — Meeting Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#f5f4f0;--surface:#fff;--border:#e2e0d8;--border-strong:#c8c5ba;
+    --text-primary:#1a1916;--text-secondary:#6b6860;--text-muted:#9e9b94;
+    --accent:#d63c1f;--pm:#2b5ea7;--pmm:#1a7a56;--eng:#8b3a6b;--zero:#c8c5ba;
+    --radius:8px;--radius-lg:14px;
+  }
+  body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text-primary);min-height:100vh;font-size:14px;line-height:1.5}
+  header{background:var(--text-primary);padding:0 32px;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;z-index:200}
+  .header-logo{font-family:'DM Mono',monospace;font-size:13px;font-weight:500;color:#fff;letter-spacing:.06em;text-transform:uppercase;opacity:.9}
+  .header-title{font-size:13px;color:rgba(255,255,255,.5);letter-spacing:.03em}
+  .main{max-width:1200px;margin:0 auto;padding:32px 24px 64px}
+  .page-header{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;margin-bottom:28px;flex-wrap:wrap}
+  .page-header-text h1{font-size:26px;font-weight:600;letter-spacing:-.02em;margin-bottom:4px}
+  .page-header-text p{font-size:13px;color:var(--text-secondary)}
+
+  /* ── Admin panel ── */
+  .admin-panel{border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface);overflow:hidden;flex-shrink:0;min-width:320px}
+  .admin-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);padding:8px 14px 6px;background:var(--bg);border-bottom:1px solid var(--border)}
+  .admin-body{padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+  .admin-data-row{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+  .admin-data-dot{width:6px;height:6px;border-radius:50%;background:var(--pmm);flex-shrink:0}
+  .admin-data-text{font-size:12px;color:var(--text-primary)}
+  .admin-data-file{font-size:11px;color:var(--text-muted);font-family:'DM Mono',monospace;margin-left:2px}
+  .admin-actions{display:flex;gap:8px;flex-wrap:wrap}
+  .upload-btn{display:inline-flex;align-items:center;gap:6px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;padding:6px 12px;border-radius:var(--radius);border:1.5px dashed var(--border-strong);background:transparent;color:var(--text-secondary);cursor:pointer;transition:all .15s;white-space:nowrap}
+  .upload-btn:hover,.upload-btn.drag-over{border-color:var(--accent);color:var(--accent);background:#fdf9f8}
+  .upload-btn svg{stroke:currentColor;flex-shrink:0}
+  .admin-btn{display:inline-flex;align-items:center;gap:6px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;padding:6px 12px;border-radius:var(--radius);border:1px solid var(--border);background:transparent;color:var(--text-secondary);cursor:pointer;transition:all .15s;white-space:nowrap}
+  .admin-btn:hover{border-color:var(--border-strong);color:var(--text-primary);background:var(--bg)}
+  .admin-btn svg,.upload-btn svg{stroke:currentColor}
+  .upload-badge{font-family:'DM Mono',monospace;font-size:10px;padding:2px 6px;border-radius:100px;background:#edf7f3;color:var(--pmm);display:none}
+  .upload-badge.visible{display:inline-block}
+  .upload-badge.error{background:#fdf0ed;color:var(--accent)}
+  #fileInput{display:none}
+  .processing-bar{display:none;align-items:center;gap:10px;padding:12px 16px;background:#eef3fc;border-radius:var(--radius);margin-bottom:20px;font-size:13px;color:var(--pm)}
+  .processing-bar.visible{display:flex}
+  .spinner{width:16px;height:16px;border:2px solid #b5d4f4;border-top-color:var(--pm);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
+  .kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px 20px;position:relative;overflow:hidden;cursor:pointer;transition:all .15s;user-select:none}
+  .kpi-card:hover{border-color:var(--border-strong);transform:translateY(-1px)}
+  .kpi-card::after{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--accent);opacity:.12;transition:opacity .15s}
+  .kpi-card.active{border-color:var(--text-primary);box-shadow:0 0 0 1.5px var(--text-primary)}
+  .kpi-card.active::after{opacity:1}
+  .kpi-card.active-has{border-color:var(--pmm);box-shadow:0 0 0 1.5px var(--pmm)}
+  .kpi-card.active-has::after{background:var(--pmm);opacity:1}
+  .kpi-card.active-none{border-color:var(--zero);box-shadow:0 0 0 1.5px var(--border-strong)}
+  .kpi-card.active-none::after{background:var(--border-strong);opacity:1}
+  .kpi-card.active-max{border-color:var(--pm);box-shadow:0 0 0 1.5px var(--pm)}
+  .kpi-card.active-max::after{background:var(--pm);opacity:1}
+  .kpi-hint{font-size:10px;color:var(--text-muted);margin-top:6px;opacity:0;transition:opacity .15s}
+  .kpi-card:hover .kpi-hint{opacity:1}
+  .kpi-card.active .kpi-hint{opacity:1;color:var(--text-secondary)}
+  .kpi-value{font-size:32px;font-weight:600;letter-spacing:-.03em;line-height:1}
+  .filter-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px 20px;margin-bottom:20px;display:flex;flex-direction:column;gap:12px}
+  .filter-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .filter-label{font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);min-width:120px}
+  .btn-group{display:flex;gap:6px;flex-wrap:wrap}
+  .filter-btn{font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;padding:5px 14px;border-radius:100px;border:1px solid var(--border);background:transparent;color:var(--text-secondary);cursor:pointer;transition:all .15s;white-space:nowrap}
+  .filter-btn:hover{border-color:var(--border-strong);color:var(--text-primary)}
+  .filter-btn.active{background:var(--text-primary);border-color:var(--text-primary);color:#fff}
+  .filter-btn.active.pm{background:var(--pm);border-color:var(--pm)}
+  .filter-btn.active.pmm{background:var(--pmm);border-color:var(--pmm)}
+  .filter-btn.active.eng{background:var(--eng);border-color:var(--eng)}
+  .filter-btn.active.multi{background:#7c4daa;border-color:#7c4daa}
+  .data-source{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-muted);margin-bottom:20px}
+  .data-source-dot{width:6px;height:6px;border-radius:50%;background:var(--pmm);flex-shrink:0}
+
+  /* ── Bottom split ── */
+  .bottom-split{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
+  .chart-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:24px}
+  .chart-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px}
+  .chart-title{font-size:13px;font-weight:500;color:var(--text-secondary)}
+  .legend{display:flex;gap:12px;flex-wrap:wrap}
+  .legend-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-secondary)}
+  .legend-dot{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+  .chart-hint{font-size:11px;color:var(--text-muted);margin-top:10px;text-align:center}
+  .chart-wrap{position:relative;width:100%}
+
+  /* ── Meeting detail panel ── */
+  .detail-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;position:sticky;top:76px}
+  .detail-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .detail-name{font-size:15px;font-weight:600;color:var(--text-primary);line-height:1.3}
+  .detail-meta{font-size:12px;color:var(--text-muted);margin-top:2px}
+  .detail-clear{background:none;border:none;font-size:18px;color:var(--text-muted);cursor:pointer;line-height:1;padding:0;flex-shrink:0}
+  .detail-clear:hover{color:var(--text-primary)}
+  .detail-empty{padding:48px 20px;text-align:center;color:var(--text-muted)}
+  .detail-empty-icon{font-size:28px;margin-bottom:8px;opacity:.4}
+  .detail-empty p{font-size:13px}
+  .detail-scroll{max-height:calc(100vh - 200px);overflow-y:auto}
+  .meeting-card{padding:14px 20px;border-bottom:1px solid var(--border);transition:background .1s}
+  .meeting-card:last-child{border-bottom:none}
+  .meeting-card:hover{background:var(--bg)}
+  .meeting-account{font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:3px;display:flex;align-items:center;gap:6px}
+  .region-pill{font-size:10px;font-weight:500;padding:1px 7px;border-radius:100px;flex-shrink:0}
+  .pill-us{background:#dbeafe;color:#1e40af}
+  .pill-emea{background:#d1fae5;color:#065f46}
+  .pill-apac{background:#fef3c7;color:#92400e}
+  .pill-latam{background:#fce7f3;color:#9d174d}
+  .pill-unknown{background:#f3f4f6;color:#6b7280}
+  .meeting-title{font-size:12px;color:var(--text-secondary);margin-bottom:6px;line-height:1.4}
+  .attendees-label{font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:4px}
+  .attendee-chips{display:flex;flex-wrap:wrap;gap:4px}
+  .chip{font-size:11px;padding:2px 8px;border-radius:100px;background:var(--bg);border:1px solid var(--border);color:var(--text-secondary)}
+  .chip.summit{background:#eef3fc;border-color:#b5d4f4;color:var(--pm);font-weight:500}
+
+  /* ── Mapping modal ── */
+  .modal-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;overflow-y:auto;padding:32px 16px}
+  .modal-backdrop.open{display:flex;align-items:flex-start;justify-content:center}
+  .modal{background:var(--surface);border-radius:var(--radius-lg);width:100%;max-width:760px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+  .modal-header{background:var(--text-primary);padding:18px 24px;display:flex;align-items:center;justify-content:space-between}
+  .modal-header h2{font-size:15px;font-weight:600;color:#fff}
+  .modal-header p{font-size:12px;color:rgba(255,255,255,.55);margin-top:2px}
+  .modal-close{background:none;border:none;color:rgba(255,255,255,.6);cursor:pointer;font-size:20px;line-height:1;padding:0}
+  .modal-close:hover{color:#fff}
+  .modal-search{padding:16px 24px;border-bottom:1px solid var(--border)}
+  .modal-search input{width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);font-family:'DM Sans',sans-serif;font-size:13px;color:var(--text-primary);background:var(--bg);outline:none}
+  .modal-search input:focus{border-color:var(--pm)}
+  .modal-table-wrap{max-height:440px;overflow-y:auto}
+  table.mapping-table{width:100%;border-collapse:collapse}
+  .mapping-table th{position:sticky;top:0;background:var(--bg);font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);padding:10px 24px;text-align:left;border-bottom:1px solid var(--border)}
+  .mapping-table td{padding:8px 24px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle}
+  .mapping-table tr:last-child td{border-bottom:none}
+  .mapping-table tr:hover td{background:var(--bg)}
+  .region-select{font-family:'DM Sans',sans-serif;font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text-primary);cursor:pointer}
+  .region-select:focus{outline:none;border-color:var(--pm)}
+  .modal-footer{padding:16px 24px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .modal-footer-note{font-size:12px;color:var(--text-muted)}
+  .btn-update{font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;padding:8px 20px;border-radius:var(--radius);border:none;background:var(--pm);color:#fff;cursor:pointer;transition:background .15s}
+  .btn-update:hover{background:#1d4ed8}
+  .changed-indicator{font-size:11px;color:var(--accent);font-weight:500;display:none}
+  .changed-indicator.visible{display:inline}
+
+  @media(max-width:900px){
+    .bottom-split{grid-template-columns:1fr}
+    .detail-panel{position:static}
+    .detail-scroll{max-height:500px}
+  }
+  @media(max-width:700px){
+    .kpi-row{grid-template-columns:repeat(2,1fr)}
+    .filter-label{min-width:80px}
+    header{padding:0 16px}
+    .main{padding:20px 16px 48px}
+    .page-header{flex-direction:column}
+    .page-header-text h1{font-size:20px}
+    .admin-panel{min-width:100%}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="header-logo">Adobe Summit 2026</span>
+  <span class="header-title">AEM · Brand Concierge · LLM Optimizer</span>
+</header>
+
+<!-- Mapping modal -->
+<div class="modal-backdrop" id="modalBackdrop" onclick="handleBackdropClick(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <h2>Account → Region Mapping</h2>
+        <p>Based on company HQ location. Edit any mapping then click Update to reprocess the dashboard.</p>
+      </div>
+      <button class="modal-close" onclick="closeMapping()">✕</button>
+    </div>
+    <div class="modal-search">
+      <input type="text" id="mappingSearch" placeholder="Search accounts…" oninput="filterMappingTable()">
+    </div>
+    <div class="modal-table-wrap">
+      <table class="mapping-table" id="mappingTable">
+        <thead><tr><th>Account</th><th>Region</th></tr></thead>
+        <tbody id="mappingBody"></tbody>
+      </table>
+    </div>
+    <div class="modal-footer">
+      <span class="changed-indicator" id="changedIndicator">Unsaved changes</span>
+      <span class="modal-footer-note">Changes apply to current session only</span>
+      <button class="btn-update" onclick="applyMappingUpdate()">Update dashboard</button>
+    </div>
+  </div>
+</div>
+
+<main class="main">
+  <div class="page-header">
+    <div class="page-header-text">
+      <h1>Meeting Dashboard</h1>
+      <p>Product Experts attending Summit 2026 — filtered from the EF meeting tracker</p>
+    </div>
+    <div class="admin-panel">
+      <div class="admin-label">Administration</div>
+      <div class="admin-body">
+        <div class="admin-data-row">
+          <span class="admin-data-dot"></span>
+          <span class="admin-data-text">Latest data: <strong id="dataBannerDate">13 Apr 2026</strong></span>
+          <span class="admin-data-file" id="dataBannerFile">Meeting_by_Employee_4_13.xlsx · sheet 4_13</span>
+        </div>
+        <div class="admin-actions">
+          <div class="upload-btn" id="uploadArea"
+               onclick="document.getElementById('fileInput').click()"
+               ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Upload meeting data
+            <span class="upload-badge" id="uploadBadge"></span>
+          </div>
+          <button class="admin-btn" onclick="openMapping()">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            Edit region mapping
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <input type="file" id="fileInput" accept=".xlsx,.xls" onchange="handleFileSelect(event)" style="display:none">
+
+  <div class="processing-bar" id="processingBar">
+    <div class="spinner"></div>
+    <span id="processingMsg">Processing meeting data…</span>
+  </div>
+
+  <div class="kpi-row">
+    <div class="kpi-card" id="kpi-card-all" onclick="setStatus('all')" title="Show everyone">
+      <div class="kpi-label">Showing</div><div class="kpi-value" id="kpi-total">—</div>
+      <div class="kpi-hint">click to reset</div>
+    </div>
+    <div class="kpi-card" id="kpi-card-has" onclick="setStatus('has')" title="Filter to people with meetings">
+      <div class="kpi-label">With meetings</div><div class="kpi-value" id="kpi-has">—</div>
+      <div class="kpi-hint">click to filter</div>
+    </div>
+    <div class="kpi-card" id="kpi-card-none" onclick="setStatus('none')" title="Filter to people with no meetings">
+      <div class="kpi-label">No meetings yet</div><div class="kpi-value" id="kpi-none">—</div>
+      <div class="kpi-hint">click to filter</div>
+    </div>
+    <div class="kpi-card" id="kpi-card-max" onclick="setStatus('max')" title="Filter to top performer">
+      <div class="kpi-label">Most meetings</div><div class="kpi-value" id="kpi-max">—</div>
+      <div class="kpi-hint">click to filter</div>
+    </div>
+  </div>
+
+  <div class="filter-panel">
+    <div class="filter-row">
+      <span class="filter-label">Group</span>
+      <div class="btn-group">
+        <button class="filter-btn active" data-group="all" onclick="setGroup('all',this)">All</button>
+        <button class="filter-btn" data-group="PM" onclick="setGroup('PM',this)">PM</button>
+        <button class="filter-btn" data-group="PMM" onclick="setGroup('PMM',this)">PMM</button>
+        <button class="filter-btn" data-group="Engineering" onclick="setGroup('Engineering',this)">Engineering</button>
+      </div>
+    </div>
+    <div class="filter-row">
+      <span class="filter-label">Customer region</span>
+      <div class="btn-group" id="regionBtns">
+        <button class="filter-btn active" data-cust="all" onclick="setCust('all',this)">All</button>
+        <button class="filter-btn" data-cust="US/Canada" onclick="setCust('US/Canada',this)">US / Canada</button>
+        <button class="filter-btn" data-cust="EMEA" onclick="setCust('EMEA',this)">EMEA</button>
+        <button class="filter-btn" data-cust="APAC" onclick="setCust('APAC',this)">APAC</button>
+        <button class="filter-btn" data-cust="Latin America" onclick="setCust('Latin America',this)">Latin America</button>
+      </div>
+    </div>
+    <div class="filter-row">
+      <span class="filter-label">Meeting type</span>
+      <div class="btn-group">
+        <button class="filter-btn active" data-multi="all" onclick="setMulti('all',this)">All meetings</button>
+        <button class="filter-btn" data-multi="multi" onclick="setMulti('multi',this)">2+ attendees only</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="data-source">
+    <span class="data-source-dot"></span>
+    <span id="dataSourceText">Showing built-in data (Meeting_by_Employee_4_13.xlsx) — upload a new file above to refresh</span>
+  </div>
+
+  <div class="bottom-split">
+    <!-- Chart -->
+    <div class="chart-card">
+      <div class="chart-header">
+        <span class="chart-title" id="chartLabel">All attendees — sorted by meeting count</span>
+        <div class="legend">
+          <span class="legend-item"><span class="legend-dot" style="background:#2b5ea7"></span>PM</span>
+          <span class="legend-item"><span class="legend-dot" style="background:#1a7a56"></span>PMM</span>
+          <span class="legend-item"><span class="legend-dot" style="background:#8b3a6b"></span>Engineering</span>
+          <span class="legend-item"><span class="legend-dot" style="background:#c8c5ba"></span>No meetings</span>
+        </div>
+      </div>
+      <div class="chart-wrap" id="chartWrap">
+        <canvas id="myChart" role="img" aria-label="Horizontal bar chart of meeting counts for Summit 2026 attendees"></canvas>
+      </div>
+      <div class="chart-hint" id="chartHint">Click a bar to see meeting details →</div>
+    </div>
+
+    <!-- Detail panel -->
+    <div class="detail-panel" id="detailPanel">
+      <div class="detail-empty" id="detailEmpty">
+        <div class="detail-empty-icon">👆</div>
+        <p>Click on an employee's bar<br>to see their meeting details</p>
+      </div>
+      <div id="detailContent" style="display:none">
+        <div class="detail-header">
+          <div>
+            <div class="detail-name" id="detailName"></div>
+            <div class="detail-meta" id="detailMeta"></div>
+          </div>
+          <button class="detail-clear" onclick="clearDetail()" title="Clear">✕</button>
+        </div>
+        <div class="detail-scroll" id="detailScroll"></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+
+const BUILTIN_PER_PERSON = {"Aditi Dutt Chaudhuri": [{"code": "SCP1596", "title": "ATT / Adobe - LLMO and CJA integration", "account": "AT&T", "region": "US/Canada", "summit_attendees": ["Aditi Dutt Chaudhuri", "Meryll Blanchet"], "all_attendees": ["Aditi Dutt Chaudhuri", "Dan Davidson", "Danielle Vitale", "John Schuler", "Jonathan Mak", "Meryll Blanchet"]}, {"code": "SCP2401", "title": "Red Cross x Adobe: Sites Optimizer + LLM Optimizer", "account": "American Red Cross", "region": "US/Canada", "summit_attendees": ["Aditi Dutt Chaudhuri", "Hyman Chung"], "all_attendees": ["Aditi Dutt Chaudhuri", "Hyman Chung", "Jonathan Mak", "Steven Anderson"]}, {"code": "TL2523", "title": "Content Integration with AI Chatbots - LLMO", "account": "First Citizens BancShares", "region": "US/Canada", "summit_attendees": ["Aditi Dutt Chaudhuri"], "all_attendees": ["Aditi Dutt Chaudhuri", "Anand Chopra", "Dave Momsen", "Maureen  Shockey"]}, {"code": "SCP2415", "title": "LG Electronics x Adobe: Executive Discussion on LLMO Strategy & D2C Innovation", "account": "LG Electronics", "region": "APAC", "summit_attendees": ["Aditi Dutt Chaudhuri", "Meryll Blanchet"], "all_attendees": ["Aditi Dutt Chaudhuri", "Aswathy Maharaj", "Christian Ridge", "Jihyung Kim", "Meryll Blanchet", "Sanghan  Lee", "Seho  Roh", "Unji Bak", "YJ Park"]}, {"code": "SCP1767", "title": "Japan customers x Adobe: Optimizing Brand Visibility in the Age of AI and LLM-Driven Discovery", "account": "Macnica, and a few japan customers", "region": "APAC", "summit_attendees": ["Aditi Dutt Chaudhuri"], "all_attendees": ["Aditi Dutt Chaudhuri", "Haruna  Mishima", "Keiichiro  Koga", "Manish Prabhune", "Yukitaka Matsumoto"]}, {"code": "SCP1404", "title": "MLB x LLMO and Agentic Web", "account": "Major League Baseball (MLB)", "region": "US/Canada", "summit_attendees": ["Aditi Dutt Chaudhuri", "Meryll Blanchet"], "all_attendees": ["Aditi Dutt Chaudhuri", "Brian Au", "Jonathan Mak", "Megan Riddick", "Meryll Blanchet", "Shakira Chanrai"]}, {"code": "SCP1960", "title": "Manulife x Adobe: LLM Optimizer Meeting with Adobe Product Team", "account": "Manulife", "region": "US/Canada", "summit_attendees": ["Aditi Dutt Chaudhuri", "Meryll Blanchet"], "all_attendees": ["Adeel Abbasi", "Aditi Dutt Chaudhuri", "Lucas Cochrane", "Meryll Blanchet"]}, {"code": "SCP2246", "title": "Travel Guard x Adobe: Value of LLM Optimizer", "account": "Travel Guard", "region": "US/Canada", "summit_attendees": ["Aditi Dutt Chaudhuri", "Meryll Blanchet"], "all_attendees": ["Aditi Dutt Chaudhuri", "Christina Browning", "Meryll Blanchet", "Sarah Warren"]}], "Lukas Ryf": [], "Gilles Knobloch": [{"code": "SCP1949", "title": "AEM - Move To Cloud", "account": "AMplifon", "region": "EMEA", "summit_attendees": ["Gilles Knobloch"], "all_attendees": ["Federico Scarpa", "Francesca Perucchetti", "Gilles Knobloch"]}, {"code": "SCP3392", "title": "AbbVie/Allergan EDS AEM Sites Cloud Alignment", "account": "AbbVie", "region": "US/Canada", "summit_attendees": ["Gilles Knobloch"], "all_attendees": ["Alexis  Chiagouris", "Gilles Knobloch", "Joseph Prunty"]}, {"code": "SCP2164", "title": "AnF x Adobe | Agentic AEM Continued Discussion", "account": "Abercrombie & Fitch", "region": "US/Canada", "summit_attendees": ["Corey Dulimba", "Gilles Knobloch"], "all_attendees": ["Corey Dulimba", "Gilles Knobloch", "Justin Grosskurth"]}, {"code": "SCP1696", "title": "Adobe x AWS: Modern AEM Architecture for Growth & Flexibility", "account": "Amazon Web Services", "region": "US/Canada", "summit_attendees": ["Gilles Knobloch", "Mitch Nelson"], "all_attendees": ["Aniket Sharma", "Dan Foy", "David Benge", "Fariz Mohamed", "Gilles Knobloch", "Lisa Gorman", "Mitch Nelson"]}, {"code": "TL3194", "title": "Danaher–Adobe AEM Engineering Alignment: Scaling Reuse, Performance, and Governance", "account": "Danaher", "region": "US/Canada", "summit_attendees": ["Gilles Knobloch"], "all_attendees": ["Gilles Knobloch", "Lee Freund"]}, {"code": "SCP1584", "title": "Adobe & DICK's: AEM Assets", "account": "Dick's Sporting Goods", "region": "US/Canada", "summit_attendees": ["Gilles Knobloch"], "all_attendees": ["Corrie Sahli", "Denise Alley", "Gabein Davis", "Gilles Knobloch", "Julie Pereira", "Michael Stragapede"]}, {"code": "SCP1651", "title": "Microsoft & Adobe | Leveraging Adobe Agentic AI", "account": "Microsoft", "region": "US/Canada", "summit_attendees": ["Cedric Huesler", "Corey Dulimba", "Gilles Knobloch", "Gillian Krause", "Shankari Panchapakesan", "Shelly Chiang"], "all_attendees": ["Cedric Huesler", "Christiana Rezaii", "Corey Dulimba", "Gilles Knobloch", "Gillian Krause", "Jeremy Doblie", "Shankari Panchapakesan", "Shelly Chiang", "Srinivas Kanumuri", "Sydney Fitt"]}], "Nick Whittenburg": [{"code": "SCP3298", "title": "AEM @ S&P", "account": "S&P Global", "region": "US/Canada", "summit_attendees": ["Brian Chaikelson", "Martin Buergi", "Nick Whittenburg"], "all_attendees": ["Brian Chaikelson", "Martin Buergi", "Nick  Whittenburg", "Patrick Kashfia"]}], "Gitesh Malik": [{"code": "SCP2353", "title": "Wellmark & Adobe: AEM Assets headless delivery", "account": "Wellmark Inc", "region": "US/Canada", "summit_attendees": ["Gitesh Malik"], "all_attendees": ["George Barrett", "Gitesh Malik"]}], "Greg Klebus": [{"code": "SCP2273", "title": "AbbVie x Adobe: AEM Assets Discussions with Product", "account": "AbbVie", "region": "US/Canada", "summit_attendees": ["Greg Klebus"], "all_attendees": ["Alexis  Chiagouris", "Greg  Klebus", "Joseph Prunty"]}, {"code": "SCP2108", "title": "Amazon Music Design, Localization and Enterprise DAM", "account": "Amazon Web Services", "region": "US/Canada", "summit_attendees": ["Brian Chaikelson", "Greg Klebus"], "all_attendees": ["Aniket Sharma", "Brian Chaikelson", "Dan Foy", "Denis  Featovic", "Fariz Mohamed", "Greg  Klebus", "Lisa Gorman", "Scott Nedwick", "Steve Wirig"]}, {"code": "SCP1448", "title": "Eli Lilly x Adobe: Tactic Assembly and integration", "account": "Eli Lilly", "region": "US/Canada", "summit_attendees": ["Alexander Saar", "Greg Klebus"], "all_attendees": ["Alex Thiers", "Alexander Saar", "Andrew Mulvaney", "Barbara  Gable", "Erik Cottrell", "Greg  Klebus", "Sean  Kelaghan"]}, {"code": "SCP1705", "title": "Interface x Adobe: AEM Assets", "account": "Interface", "region": "US/Canada", "summit_attendees": ["Greg Klebus"], "all_attendees": ["Greg  Klebus", "Haash Muhammad"]}, {"code": "SCP2217", "title": "Red Hat Content Hub + Content Supply Chain Discussion", "account": "Red Hat", "region": "US/Canada", "summit_attendees": ["Greg Klebus"], "all_attendees": ["Abby Brooks", "Anna Beimford", "Greg  Klebus"]}, {"code": "SCP2865", "title": "Adobe // KDP - Metadata Management & Architecture", "account": "DPS Holdings", "region": "EMEA", "summit_attendees": ["Greg Klebus", "Marc Angelinovich"], "all_attendees": ["David Ford", "Greg  Klebus", "Marc Angelinovich", "Tom McCullough"]}], "Kay Sin": [{"code": "SCP1685", "title": "Cross Platform Agentic AI Capabilities for Sun Life", "account": "Sun Life Assurance Company of Canada", "region": "US/Canada", "summit_attendees": ["Kay Sin", "Loni Stark"], "all_attendees": ["Justin Baker", "Kay Sin", "Loni Stark", "Lucas Cochrane"]}], "Sunish Verma": [{"code": "SCP1569", "title": "Adobe & DICK's: AJO Decisioning Features", "account": "Dick's Sporting Goods", "region": "US/Canada", "summit_attendees": ["Sunish Verma"], "all_attendees": ["Brandon Poyfair", "Denise Alley", "Gabein Davis", "Julie Pereira", "Michael Stragapede", "Rob Hornick", "Scott Segrin", "Sunish Verma"]}, {"code": "SCP1737", "title": "DICKS x Adobe Partnership: Speed 2", "account": "Dick's Sporting Goods", "region": "US/Canada", "summit_attendees": ["Sunish Verma"], "all_attendees": ["Amanda Harris", "Anjul Bhambhri", "CHRIS PALMER", "Denise Alley", "Hannah Elsakr", "Jan Gunneson", "Sunish Verma"]}, {"code": "SCP1385", "title": "GM-Adobe: Engineering & AI Product Leadership", "account": "General Motors (GM)", "region": "US/Canada", "summit_attendees": ["Sunish Verma"], "all_attendees": ["Adam  Ward1", "Anjul Bhambhri", "Cameron Kahan", "Sunish Verma", "Vineet Sharma"]}], "Bogdan Petre Posa": [], "Mihai Corlan": [{"code": "SCP3113", "title": "ServiceNow Sites Optimizer Session", "account": "ServiceNow", "region": "US/Canada", "summit_attendees": ["Kathie Yang", "Mihai Corlan"], "all_attendees": ["Clay Bellew", "Deck Reyes", "Kathie Yang", "Maria Gimenez", "Mihai Corlan", "Pam Hudson", "Tara Petre", "Tyler Bell"]}], "Pauline Huynh": [{"code": "SCP2534", "title": "BMS - AEM Sites CS — The Foundation for Scalable Agentic Experiences", "account": "Bristol-Myers Squibb (BMS)", "region": "US/Canada", "summit_attendees": ["Pauline Huynh"], "all_attendees": ["Bertrand de Coatpont", "George Strathern", "James Bohi", "Pauline Huynh"]}], "Martin Buergi": [{"code": "SCP2125", "title": "Abercrombie x Adobe Agentic Roadmap", "account": "Abercrombie & Fitch", "region": "US/Canada", "summit_attendees": ["Corey Dulimba", "Martin Buergi"], "all_attendees": ["Anthony Slyter", "Christy Min", "Cindy  Spess", "Corey Dulimba", "Corrie Sahli", "Denise Alley", "Martin Buergi"]}, {"code": "SCP1427", "title": "Benefits and LOE for Implementing Edge Delivery Services & Experience Modernization Agent", "account": "Fiserv", "region": "US/Canada", "summit_attendees": ["Martin Buergi"], "all_attendees": ["Martin Buergi", "Nicole  Rosenbaum", "Sara  Townsend"]}, {"code": "SCP1706", "title": "Interface x Adobe: AEM Sites", "account": "Interface", "region": "US/Canada", "summit_attendees": ["Martin Buergi"], "all_attendees": ["Blake Hull", "Martin Buergi"]}, {"code": "SCP1839", "title": "Lamb Weston | Adobe: Content Management (AEM Sites)", "account": "Lamb Weston", "region": "US/Canada", "summit_attendees": ["Martin Buergi"], "all_attendees": ["Chris Helin", "James Lui", "Martin Buergi"]}, {"code": "SCP2877", "title": "Nike x Adobe | Agentic Strategy and Content Platforms", "account": "Nike", "region": "US/Canada", "summit_attendees": ["Martin Buergi"], "all_attendees": ["Chris Harding", "Corrie Sahli", "Justin Grosskurth", "Kaci Smith", "Martin Buergi"]}, {"code": "SCP2419", "title": "Adobe x Prada - CMS strategy", "account": "Prada", "region": "EMEA", "summit_attendees": ["Martin Buergi"], "all_attendees": ["Corrado Gargiulo", "Francesca Perucchetti", "Martin Buergi"]}, {"code": "SCP3298", "title": "AEM @ S&P", "account": "S&P Global", "region": "US/Canada", "summit_attendees": ["Brian Chaikelson", "Martin Buergi"], "all_attendees": ["Brian Chaikelson", "Martin Buergi", "Nick  Whittenburg", "Patrick Kashfia"]}], "Vaishnav Gorur": [], "Paolo Mottadelli": [{"code": "SCP1556", "title": "Astra Zeneca x Adobe : Agentic Web", "account": "AstraZeneca", "region": "EMEA", "summit_attendees": ["Loni Stark", "Michael Marth", "Paolo Mottadelli"], "all_attendees": ["Anna Maher", "Loni Stark", "Michael Marth", "Paolo Mottadelli", "Preetham Yadav"]}, {"code": "SCP1919", "title": "Credit One x Adobe: AEM Cloud Migration Strategy and Experience Modernization Agent Deep Dive", "account": "Credit One", "region": "US/Canada", "summit_attendees": ["Paolo Mottadelli"], "all_attendees": ["David Ford", "Paolo Mottadelli", "Paul Are-latosa", "Peter Parker"]}, {"code": "SCP2746", "title": "AEM Sites Modernization (+EDS) with Lumen", "account": "Lumen", "region": "US/Canada", "summit_attendees": ["Chris Millar", "Paolo Mottadelli"], "all_attendees": ["Chris Millar", "Isaac Nikar", "Paolo Mottadelli"]}], "Nikunj Merchant": [{"code": "SCP1750", "title": "BMC Software & Adobe:", "account": "BMC Software", "region": "US/Canada", "summit_attendees": ["Nikunj Merchant"], "all_attendees": ["Anoop Sahgal", "Brian Wood", "Colleen Goodwin", "Emily McReynolds", "Nikunj Merchant", "PJ Thompson", "Travis Sabin"]}, {"code": "TL2716", "title": "Bio-Rad x Adobe: The Future for Bio-Rad with AEM", "account": "Bio-Rad Laboratories, Inc.", "region": "US/Canada", "summit_attendees": ["Nikunj Merchant"], "all_attendees": ["Andrew Berman", "Andy Khorshid", "Danielle  Goch", "Nikunj Merchant"]}, {"code": "SCP2718", "title": "Colgate - Palmolive AEM EDS", "account": "Colgate-Palmolive Company", "region": "US/Canada", "summit_attendees": ["Chris Millar", "Nikunj Merchant"], "all_attendees": ["Anthony Slyter", "Chris Helin", "Chris Millar", "Jennifer Slaughter", "May Sari-Scoggins", "Mike Neumann", "Nikunj Merchant", "Shawn Mccarthy"]}, {"code": "SCP2000", "title": "DigiCert & Adobe: Modern Web Experiences with AEM and Edge Delivery", "account": "DigiCert", "region": "US/Canada", "summit_attendees": ["Nikunj Merchant"], "all_attendees": ["JD  Price", "Joseph Stewart", "Nikunj Merchant"]}, {"code": "SCP2601", "title": "Equitable x Adobe: Content Supply Chain Meeting", "account": "Equitable", "region": "US/Canada", "summit_attendees": ["Kathie Yang", "Nikunj Merchant"], "all_attendees": ["Kathie Yang", "Kira Bui", "Mike DeGagne", "Mike Dutter", "Nikunj Merchant"]}, {"code": "SCP2652", "title": "JP Morgan: LLM Optimization + Brand Visibility", "account": "JPMorgan Chase", "region": "US/Canada", "summit_attendees": ["Nikunj Merchant"], "all_attendees": ["Chris  Arrix", "Nikunj Merchant"]}, {"code": "SCP2614", "title": "QVC x Adobe | AEM Cloud Transformation", "account": "QVC Group", "region": "US/Canada", "summit_attendees": ["Nikunj Merchant"], "all_attendees": ["Cindy  Spess", "Corrie Sahli", "Justin Grosskurth", "Nikunj Merchant"]}, {"code": "SCP2611", "title": "RGA - Global Content Acceleration", "account": "RGA", "region": "US/Canada", "summit_attendees": ["Nikunj Merchant"], "all_attendees": ["Craig  Stangis", "Dustin Vaughn", "John Bird", "Nikunj Merchant"]}, {"code": "TL2807", "title": "Robert Half/Adobe - AEM Product Management Meeting", "account": "Robert Half", "region": "US/Canada", "summit_attendees": ["Nikunj Merchant"], "all_attendees": ["Nikunj Merchant", "Vincent Militello"]}, {"code": "SCP2815", "title": "Southern Co. - AEM Art of the Possible", "account": "Southern Company", "region": "US/Canada", "summit_attendees": ["Nikunj Merchant"], "all_attendees": ["Nikunj Merchant", "Wendy Armstrong"]}, {"code": "SCP2659", "title": "State Farm x Adobe: AEM Cloud Services", "account": "State Farm Mutual Automobile Insurance", "region": "US/Canada", "summit_attendees": ["Nikunj Merchant"], "all_attendees": ["Nikunj Merchant", "Oren Herzenberg", "Scott Sabey"]}, {"code": "SCP3005", "title": "AEM Ask the Experts", "account": "Vistra Corp", "region": "US/Canada", "summit_attendees": ["Nikunj Merchant"], "all_attendees": ["Brian Wood", "Christina Cole", "Jamal Slappy", "Jeff Vance", "Nate Golubiewski", "Nikunj Merchant"]}, {"code": "SCP3000", "title": "Vizient x Adobe: Content & Agent Activations", "account": "Vizient", "region": "US/Canada", "summit_attendees": ["Nikunj Merchant"], "all_attendees": ["Adrienne Tsai", "Brian Wood", "Gina Hart", "Jason Allen", "Jeff Vance", "Nikunj Merchant", "Sahar Anderson"]}], "Kathie Yang": [{"code": "SCP1698", "title": "Centene x Adobe: Sites Optimizer", "account": "Centene", "region": "US/Canada", "summit_attendees": ["Hyman Chung", "Kathie Yang"], "all_attendees": ["Hyman Chung", "Joe Houts", "Kathie Yang"]}, {"code": "SCP3352", "title": "CTF x PMM for ASO and LLMO", "account": "Chow Tai Fook Jewellery", "region": "APAC", "summit_attendees": ["Kathie Yang"], "all_attendees": ["Connie Mok", "Kathie Yang"]}, {"code": "SCP3028", "title": "Adobe x Costa Crociere: LLM Optimizer evolution", "account": "Costa Crociere", "region": "EMEA", "summit_attendees": ["Kathie Yang"], "all_attendees": ["Corrado Gargiulo", "Francesca Perucchetti", "Kathie Yang"]}, {"code": "SCP2998", "title": "Adobe // KDP - LLMO & Agentic Web", "account": "DPS Holdings", "region": "EMEA", "summit_attendees": ["Kathie Yang", "Meryll Blanchet"], "all_attendees": ["Kathie Yang", "Laurence  Krulik", "Meryll Blanchet", "Tom McCullough"]}, {"code": "SCP1379", "title": "Agentic AI Brand Activation Solutions - Definity Insurance", "account": "Definity Financial", "region": "US/Canada", "summit_attendees": ["Karthik Muralidharan", "Kathie Yang"], "all_attendees": ["Karthik Muralidharan", "Kathie Yang", "Ryan Kaudaissy", "Sam Samad"]}, {"code": "SCP2601", "title": "Equitable x Adobe: Content Supply Chain Meeting", "account": "Equitable", "region": "US/Canada", "summit_attendees": ["Kathie Yang", "Nikunj Merchant"], "all_attendees": ["Kathie Yang", "Kira Bui", "Mike DeGagne", "Mike Dutter", "Nikunj Merchant"]}, {"code": "SCP2624", "title": "Herbalife x LLM Optimizer & Brand Concierge", "account": "Herbalife", "region": "US/Canada", "summit_attendees": ["Kathie Yang", "Max Iguer"], "all_attendees": ["Kathie Yang", "Lucas Cochrane", "Max Iguer"]}, {"code": "SCP1707", "title": "Interface Carpeting x Adobe: LLM Optimizer + Sites Optimizer", "account": "Interface", "region": "US/Canada", "summit_attendees": ["Kathie Yang"], "all_attendees": ["Blake Hull", "Kathie Yang"]}, {"code": "TL3395", "title": "Northwell Health & Adobe: LLMO", "account": "Northwell Health", "region": "US/Canada", "summit_attendees": ["Kathie Yang"], "all_attendees": ["Kathie Yang", "William Haas"]}, {"code": "SCP3113", "title": "ServiceNow Sites Optimizer Session", "account": "ServiceNow", "region": "US/Canada", "summit_attendees": ["Kathie Yang", "Mihai Corlan"], "all_attendees": ["Clay Bellew", "Deck Reyes", "Kathie Yang", "Maria Gimenez", "Mihai Corlan", "Pam Hudson", "Tara Petre", "Tyler Bell"]}, {"code": "SCP3199", "title": "AEM evolution and LLMO", "account": "Unipol", "region": "EMEA", "summit_attendees": ["Kathie Yang"], "all_attendees": ["Alex Gordiani", "Joshua Young", "Kathie Yang"]}, {"code": "SCP2954", "title": "Adobe x Prada - LLM Optimizer evolution", "account": "prada", "region": "EMEA", "summit_attendees": ["Kathie Yang"], "all_attendees": ["Corrado Gargiulo", "Francesca Perucchetti", "Kathie Yang"]}], "Marc Angelinovich": [{"code": "SCP2448", "title": "Adobe x BRP Ai for CSC and DAM Readiness", "account": "BRP", "region": "US/Canada", "summit_attendees": ["Marc Angelinovich"], "all_attendees": ["Brian  Laviolette", "Marc Angelinovich", "Ryan Kaudaissy"]}, {"code": "SCP2686", "title": "Costco x Adobe: AEM Connect", "account": "Costco", "region": "US/Canada", "summit_attendees": ["Marc Angelinovich"], "all_attendees": ["Allen  Afshar", "Christy Min", "Marc Angelinovich"]}, {"code": "SCP2865", "title": "Adobe // KDP - Metadata Management & Architecture", "account": "DPS Holdings", "region": "EMEA", "summit_attendees": ["Marc Angelinovich"], "all_attendees": ["David Ford", "Greg  Klebus", "Marc Angelinovich", "Tom McCullough"]}, {"code": "SCP3276", "title": "Deloitte x Adobe: DAM", "account": "Deloitte", "region": "US/Canada", "summit_attendees": ["Marc Angelinovich"], "all_attendees": ["Marc Angelinovich", "Ryan Nelson", "Sasha Rizika"]}, {"code": "SCP1437", "title": "FNBO x Adobe AI/AEM", "account": "First National Bank of Omaha", "region": "US/Canada", "summit_attendees": ["Marc Angelinovich"], "all_attendees": ["Jaedon Contreras", "Marc Angelinovich", "Nicki Kalokerinos"]}, {"code": "SCP2340", "title": "The Home Depot x Adobe: Unified Campaign Metadata", "account": "Home Depot", "region": "US/Canada", "summit_attendees": ["Marc Angelinovich"], "all_attendees": ["Alex Thiers", "Brent Rudewick", "Carina Starr", "Marc Angelinovich", "Michael Stragapede"]}, {"code": "SCP3091", "title": "Honeywell x Adobe: Cloud Modernization Discussion", "account": "Honeywell", "region": "US/Canada", "summit_attendees": ["Marc Angelinovich"], "all_attendees": ["Akansha Yadav", "Andrew Berman", "Marc Angelinovich", "Mike Neumann", "Rohit Madiyan"]}, {"code": "SCP2272", "title": "Loblaw x Adobe: AEM Assets Cloud Services", "account": "Loblaw", "region": "US/Canada", "summit_attendees": ["Marc Angelinovich"], "all_attendees": ["Kurtis Weber", "Marc Angelinovich", "Ryan Kaudaissy", "Suresh Ravuru"]}, {"code": "SCP2447", "title": "PGA TOUR x Adobe: Unified Review & Approval to Assets", "account": "PGA Tour Inc", "region": "US/Canada", "summit_attendees": ["Marc Angelinovich"], "all_attendees": ["Brandon Lane", "Chris Piwinski", "Jason Barron", "Lauren Sisneros", "Marc Angelinovich"]}, {"code": "SCP2318", "title": "SAP X Adobe: AEM Assets Usage", "account": "SAP", "region": "EMEA", "summit_attendees": ["Marc Angelinovich", "Shankari Panchapakesan"], "all_attendees": ["Boris Guhlman", "Conrad Wöltge", "Dirk  Bosserhoff", "Marc Angelinovich", "Shankari Panchapakesan"]}, {"code": "TL3333", "title": "SSB X Adobe: DAM Discussion", "account": "Serta Simmons", "region": "US/Canada", "summit_attendees": ["Marc Angelinovich"], "all_attendees": ["Aaron Krass", "Chris Oliver", "Gagan  Tayal", "Marc Angelinovich", "Matt Culver"]}, {"code": "SCP2670", "title": "UA x Adobe | Assets Value and Future Roadmap", "account": "Under Armour", "region": "US/Canada", "summit_attendees": ["Marc Angelinovich"], "all_attendees": ["Corrie Sahli", "Justin Grosskurth", "Marc Angelinovich"]}, {"code": "SCP2045", "title": "Walmart", "account": "Walmart", "region": "US/Canada", "summit_attendees": ["Loni Stark", "Marc Angelinovich"], "all_attendees": ["Brent Rudewick", "Kaci Smith", "Loni Stark", "Marc Angelinovich", "Tony Galindo"]}], "Brian Chaikelson": [{"code": "SCP2108", "title": "Amazon Music Design, Localization and Enterprise DAM", "account": "Amazon Web Services", "region": "US/Canada", "summit_attendees": ["Brian Chaikelson"], "all_attendees": ["Aniket Sharma", "Brian Chaikelson", "Dan Foy", "Denis  Featovic", "Fariz Mohamed", "Greg  Klebus", "Lisa Gorman", "Scott Nedwick", "Steve Wirig"]}, {"code": "TL1887", "title": "Bristol Myers Squibb | Adobe : What AEM Cloud Unlocks", "account": "Bristol-Myers Squibb (BMS)", "region": "US/Canada", "summit_attendees": ["Brian Chaikelson"], "all_attendees": ["Brian Chaikelson", "Gina Casagrande", "John Gonsalves", "Kam  Bey", "Miranda Manganaro"]}, {"code": "SCP2072", "title": "KeyBank x Adobe Summit Meeting AEM and Workfront", "account": "Keybank National Association", "region": "US/Canada", "summit_attendees": ["Brian Chaikelson"], "all_attendees": ["Alicia Ping", "Brian Chaikelson", "Khachatur Sedrakyan", "Nick Bricker", "Oren Herzenberg", "Scott Sabey", "Vazgen Babayan"]}, {"code": "SCP3298", "title": "AEM @ S&P", "account": "S&P Global", "region": "US/Canada", "summit_attendees": ["Brian Chaikelson", "Martin Buergi"], "all_attendees": ["Brian Chaikelson", "Martin Buergi", "Nick  Whittenburg", "Patrick Kashfia"]}], "Karthik Muralidharan": [{"code": "SCP2532", "title": "Costco x Adobe: LLMO", "account": "Costco", "region": "US/Canada", "summit_attendees": ["Karthik Muralidharan"], "all_attendees": ["Alex Jose", "Allen  Afshar", "Christy Min", "Karthik Muralidharan", "Laurence  Krulik"]}, {"code": "SCP2690", "title": "Costco x Adobe: Personalization Planning", "account": "Costco", "region": "US/Canada", "summit_attendees": ["Karthik Muralidharan"], "all_attendees": ["Allen  Afshar", "Christy Min", "Kaci Smith", "Karthik Muralidharan"]}, {"code": "SCP2510", "title": "CVS & Adobe: Agentic Brand Activation Solutions Overview / Connect", "account": "Cvs Health", "region": "US/Canada", "summit_attendees": ["David Folk", "Karthik Muralidharan"], "all_attendees": ["Ali Colman", "Bill  Farnsworth", "Carina Starr", "David Folk", "Kalia Perse", "Karthik Muralidharan", "Laurence  Krulik", "Scott Segrin"]}, {"code": "SCP1379", "title": "Agentic AI Brand Activation Solutions - Definity Insurance", "account": "Definity Financial", "region": "US/Canada", "summit_attendees": ["Karthik Muralidharan", "Kathie Yang"], "all_attendees": ["Karthik Muralidharan", "Kathie Yang", "Ryan Kaudaissy", "Sam Samad"]}, {"code": "SCP1384", "title": "Eli Lilly x Adobe: Structuring Web for Success", "account": "Eli Lilly", "region": "US/Canada", "summit_attendees": ["Amol Anand", "Karthik Muralidharan", "Michael Marth"], "all_attendees": ["Amol Anand", "Andrew Mulvaney", "Barbara  Gable", "Erik Cottrell", "Karthik Muralidharan", "Michael Marth", "Sean  Kelaghan"]}, {"code": "SCP2751", "title": "Adobe // EM – Future of AEM Discussion", "account": "Enterprise Holdings", "region": "US/Canada", "summit_attendees": ["David Folk", "Karthik Muralidharan"], "all_attendees": ["David Folk", "Jonathan Mak", "Karthik Muralidharan", "Taylor Smith", "Tom McCullough"]}, {"code": "SCP2930", "title": "Italika x Adobe", "account": "Grupo Salinas-TV Azteca, S.A.B. de C.V.", "region": "Latin America", "summit_attendees": ["Karthik Muralidharan"], "all_attendees": ["Edwin Oropeza rodriguez", "Jessica Ollivier", "Karthik Muralidharan"]}, {"code": "SCP2432", "title": "The Home Depot x Adobe: LLMO Pilot with Home Depot to Optimize GEO", "account": "Home Depot", "region": "US/Canada", "summit_attendees": ["Karthik Muralidharan"], "all_attendees": ["Alex Jose", "Carina Starr", "Corrie Sahli", "Karthik Muralidharan", "Laurence  Krulik"]}, {"code": "SCP1762", "title": "Lamb Weston | Adobe: Introduction to Karthik", "account": "Lamb Weston", "region": "US/Canada", "summit_attendees": ["Karthik Muralidharan"], "all_attendees": ["Chris Helin", "James Lui", "Karthik Muralidharan", "Matt Eanes"]}, {"code": "SCP2032", "title": "Lundbeck x Adobe: LLM optimization (one of Uma's priorities)", "account": "Lundbeck", "region": "Unknown", "summit_attendees": ["Karthik Muralidharan"], "all_attendees": ["David Graybeal", "Karthik Muralidharan", "Tory Smithe"]}, {"code": "SCP2007", "title": "Microchip | Adobe: Move to Cloud Readiness", "account": "Microchip", "region": "US/Canada", "summit_attendees": ["Karthik Muralidharan"], "all_attendees": ["Karthik Muralidharan", "Michael  O'Neill", "Tyler Bell"]}, {"code": "SCP2644", "title": "Kroger x Adobe: ASO", "account": "The Kroger Co", "region": "US/Canada", "summit_attendees": ["Hyman Chung", "Karthik Muralidharan"], "all_attendees": ["Christy Min", "Hyman Chung", "Karthik Muralidharan", "Laurence  Krulik", "Will Henry"]}, {"code": "SCP2105", "title": "WK Kellogg | Adobe: LLM Optimizer & Sites Optimizer Meeting", "account": "WK Kellogg", "region": "US/Canada", "summit_attendees": ["Karthik Muralidharan"], "all_attendees": ["Chris Helin", "James Lui", "Karthik Muralidharan"]}, {"code": "EF1847", "title": "Wells Fargo + ADBE : LLM Optimizer", "account": "Wells Fargo Bank", "region": "US/Canada", "summit_attendees": ["Karthik Muralidharan"], "all_attendees": ["Abhi Murty", "Jayanthi Raja Segaran", "Karthik Muralidharan", "Oren Herzenberg"]}], "Tanju Erinmez": [], "Alexander Saar": [{"code": "SCP1448", "title": "Eli Lilly x Adobe: Tactic Assembly and integration", "account": "Eli Lilly", "region": "US/Canada", "summit_attendees": ["Alexander Saar"], "all_attendees": ["Alex Thiers", "Alexander Saar", "Andrew Mulvaney", "Barbara  Gable", "Erik Cottrell", "Greg  Klebus", "Sean  Kelaghan"]}, {"code": "SCP1766", "title": "Kao & ANA x Adobe : AEM Cloud Migration", "account": "Kao Corporation, All Nippon Airways Co., Ltd.", "region": "APAC", "summit_attendees": ["Alexander Saar"], "all_attendees": ["Alexander Saar", "Keiichiro  Koga", "Soichiro Unose"]}, {"code": "SCP2331", "title": "T-Mobile Magenta Pulse + Adobe: The Future of AEM Authoring, Personalization & AI Agents", "account": "T-Mobile", "region": "US/Canada", "summit_attendees": ["Adam Pazik", "Alexander Saar"], "all_attendees": ["Adam Pazik", "Alexander Saar", "Meredith Birkmeyer", "Thais Guimaraes"]}, {"code": "SCP2743", "title": "AEM Cloud + Edge Delivery Services (EDS) Best Practices and where LLMO/ASO/Brand Concierge fit in", "account": "Toyota", "region": "APAC", "summit_attendees": ["Adam Pazik", "Alexander Saar"], "all_attendees": ["Adam  Backman", "Adam Pazik", "Alexander Saar", "Yuji Nakagawa"]}], "Markus Haack": [], "Amol Anand": [{"code": "SCP2099", "title": "DigiCert & Adobe | EDS Conversation", "account": "DigiCert", "region": "US/Canada", "summit_attendees": ["Amol Anand", "Gillian Krause"], "all_attendees": ["Amol Anand", "Gillian Krause", "Joseph Stewart"]}, {"code": "SCP1384", "title": "Eli Lilly x Adobe: Structuring Web for Success", "account": "Eli Lilly", "region": "US/Canada", "summit_attendees": ["Amol Anand", "Karthik Muralidharan", "Michael Marth"], "all_attendees": ["Amol Anand", "Andrew Mulvaney", "Barbara  Gable", "Erik Cottrell", "Karthik Muralidharan", "Michael Marth", "Sean  Kelaghan"]}, {"code": "SCP1543", "title": "Kaiser Permanente x Adobe: AEM Move to Cloud with EDS - Product Discussion", "account": "Kaiser Permanente", "region": "US/Canada", "summit_attendees": ["Amol Anand", "Cedric Huesler", "Gillian Krause", "Haresh Kumar"], "all_attendees": ["Amol Anand", "Cedric Huesler", "George Strathern", "Gillian Krause", "Haresh Kumar", "Keith Burrows"]}, {"code": "SCP1648", "title": "Microsoft & Adobe | Cloud Services/EDS/Azure Alignment", "account": "Microsoft", "region": "US/Canada", "summit_attendees": ["Amol Anand", "Gillian Krause", "Mitch Nelson"], "all_attendees": ["Amol Anand", "Christiana Rezaii", "Gillian Krause", "Mitch Nelson", "Sydney Fitt"]}, {"code": "SCP3212", "title": "Northwell Health and Adobe - AEM Discussion", "account": "Northwell Health", "region": "US/Canada", "summit_attendees": ["Amol Anand"], "all_attendees": ["Amol Anand", "Nick  Christy", "William Haas"]}], "Ron Nagy": [], "Cedric Huesler": [{"code": "TL2997", "title": "Apple x Adobe: LLMO", "account": "Apple", "region": "US/Canada", "summit_attendees": ["Cedric Huesler"], "all_attendees": ["Cedric Huesler", "Robert Pullen", "Sasha Rizika"]}, {"code": "SCP1969", "title": "BlackRock x Adobe: Driving AEM Cloud & Universal Editor Forward", "account": "BlackRock", "region": "US/Canada", "summit_attendees": ["Cedric Huesler", "Gabriel Walt"], "all_attendees": ["Cedric Huesler", "Gabriel Walt", "Matt  Downing", "Nicole Diette"]}, {"code": "SCP2402", "title": "Citizens Bank-Adobe Summit Meeting: AEM Site Edge Delivery", "account": "Citizens Bank", "region": "US/Canada", "summit_attendees": ["Cedric Huesler"], "all_attendees": ["Cedric Huesler", "Jarad Plesser", "Scott Sabey"]}, {"code": "SCP1483", "title": "EY & Adobe | Next Generation Web with Agentic Technology", "account": "Ernst & Young (EY)", "region": "US/Canada", "summit_attendees": ["Cedric Huesler"], "all_attendees": ["Andy Page", "Cedric Huesler", "Laurence  Krulik", "Sydney Fitt"]}, {"code": "SCP2776", "title": "GSK x Adobe: Move to EDS", "account": "GSK", "region": "EMEA", "summit_attendees": ["Cedric Huesler"], "all_attendees": ["Cedric Huesler", "Erik Johnson", "George Strathern"]}, {"code": "SCP1509", "title": "GM - AEM Strategic Planning & Product Needs", "account": "General Motors (GM)", "region": "US/Canada", "summit_attendees": ["Cedric Huesler"], "all_attendees": ["Adam  Ward1", "Bennett Olson", "Cameron Kahan", "Cedric Huesler", "Clay Bellew", "Lars Trieloff", "Pam Hudson"]}, {"code": "TL3403", "title": "Adobe & JPMC AEM MS Updates (AI/Agentic)", "account": "JPMorgan Chase", "region": "US/Canada", "summit_attendees": ["Cedric Huesler"], "all_attendees": ["Cedric Huesler", "Chris  Arrix"]}, {"code": "SCP1543", "title": "Kaiser Permanente x Adobe: AEM Move to Cloud with EDS - Product Discussion", "account": "Kaiser Permanente", "region": "US/Canada", "summit_attendees": ["Amol Anand", "Cedric Huesler", "Gillian Krause", "Haresh Kumar"], "all_attendees": ["Amol Anand", "Cedric Huesler", "George Strathern", "Gillian Krause", "Haresh Kumar", "Keith Burrows"]}, {"code": "SCP3312", "title": "KrisShop X Adobe - Brand Concierge", "account": "KrisShop", "region": "APAC", "summit_attendees": ["Cedric Huesler"], "all_attendees": ["Cedric Huesler", "Mel Lim", "Serena Nguyen", "Winnie Ang"]}, {"code": "SCP1651", "title": "Microsoft & Adobe | Leveraging Adobe Agentic AI", "account": "Microsoft", "region": "US/Canada", "summit_attendees": ["Cedric Huesler", "Corey Dulimba", "Gilles Knobloch", "Gillian Krause", "Shankari Panchapakesan", "Shelly Chiang"], "all_attendees": ["Cedric Huesler", "Christiana Rezaii", "Corey Dulimba", "Gilles Knobloch", "Gillian Krause", "Jeremy Doblie", "Shankari Panchapakesan", "Shelly Chiang", "Srinivas Kanumuri", "Sydney Fitt"]}, {"code": "SCP3041", "title": "Singlife X Adobe - Agentic Brand Activation", "account": "Singapore Life", "region": "APAC", "summit_attendees": ["Cedric Huesler"], "all_attendees": ["Cedric Huesler", "Mel Lim", "Winnie Ang"]}, {"code": "SCP1730", "title": "Unleashing the modern CX experience with AEM Cloud", "account": "Sun Life Assurance Company of Canada", "region": "US/Canada", "summit_attendees": ["Cedric Huesler"], "all_attendees": ["Cedric Huesler", "Justin Baker", "Liviu Chis"]}, {"code": "SCP2329", "title": "T-Mobile Magenta Pulse + Adobe: The Future of AEM Authoring, Personalization & AI Agents", "account": "T-Mobile", "region": "US/Canada", "summit_attendees": ["Cedric Huesler", "Shankari Panchapakesan"], "all_attendees": ["Cedric Huesler", "Meredith Birkmeyer", "Shankari Panchapakesan", "Thais Guimaraes"]}, {"code": "SCP1367", "title": "Vanguard x Adobe: AEM Cloud - Migration to Cloud", "account": "Vanguard Group", "region": "US/Canada", "summit_attendees": ["Cedric Huesler"], "all_attendees": ["Cedric Huesler", "Julian  Lopez", "Matt  Downing", "Nicole Diette"]}, {"code": "SCP2040", "title": "Virgin Atlantic X Adobe: AEM", "account": "Virgin Atlantic", "region": "EMEA", "summit_attendees": ["Cedric Huesler"], "all_attendees": ["Cedric Huesler", "Clara Tondato da Ruos", "Joshua Young"]}], "Max Iguer": [{"code": "SCP2886", "title": "ASUS x Adobe: AI-First website: Brand Concierge future", "account": "ASUS", "region": "APAC", "summit_attendees": ["Max Iguer"], "all_attendees": ["Alan Chan", "Max Iguer", "Michelle Wu"]}, {"code": "SCP3316", "title": "ASUS | AI-First website: Brand Concierge future", "account": "ASUS", "region": "APAC", "summit_attendees": ["Max Iguer"], "all_attendees": ["Alan Chan", "Andy  Narayanan", "Cecily  Liu", "Max Iguer", "Michelle Wu"]}, {"code": "SCP2734", "title": "Bridgestone x Adobe: Brand Concierge Overview", "account": "Bridgestone", "region": "APAC", "summit_attendees": ["Max Iguer"], "all_attendees": ["Andy  Narayanan", "Cecily  Liu", "Christy Min", "Cindy  Spess", "Corrie Sahli", "Kristen Witous", "Max Iguer"]}, {"code": "SCP2624", "title": "Herbalife x LLM Optimizer & Brand Concierge", "account": "Herbalife", "region": "US/Canada", "summit_attendees": ["Kathie Yang", "Max Iguer"], "all_attendees": ["Kathie Yang", "Lucas Cochrane", "Max Iguer"]}, {"code": "SCP2210", "title": "RBC x Driving Conversational Personalization with Brand Concierge", "account": "Royal Bank of Canada (RBC)", "region": "US/Canada", "summit_attendees": ["Max Iguer"], "all_attendees": ["Adeel Abbasi", "Andy  Narayanan", "Lucas Cochrane", "Max Iguer", "Sam Samad"]}, {"code": "SCP3042", "title": "Singlife X Adobe - Brand Concierge", "account": "Singapore Life", "region": "APAC", "summit_attendees": ["Max Iguer"], "all_attendees": ["Max Iguer", "Mel Lim", "Winnie Ang"]}, {"code": "SCP2193", "title": "Stryker- AI-Driven Client Experience Innovation", "account": "Stryker", "region": "US/Canada", "summit_attendees": ["Max Iguer"], "all_attendees": ["David Graybeal", "Karen Zbyszinski", "Max Iguer", "Richard Grack"]}], "Gabriel Walt": [{"code": "SCP1818", "title": "Amazon Business x Adobe: Leveraging AEM Agents vs Amazon Agents and Impact on Business Drivers", "account": "Amazon Web Services", "region": "US/Canada", "summit_attendees": ["Gabriel Walt"], "all_attendees": ["Aniket Sharma", "Dan Foy", "Fariz Mohamed", "Gabriel Walt", "Lisa Gorman", "Mark  Shubin"]}, {"code": "SCP1969", "title": "BlackRock x Adobe: Driving AEM Cloud & Universal Editor Forward", "account": "BlackRock", "region": "US/Canada", "summit_attendees": ["Cedric Huesler", "Gabriel Walt"], "all_attendees": ["Cedric Huesler", "Gabriel Walt", "Matt  Downing", "Nicole Diette"]}], "Arun Taneja": [{"code": "SCP2312", "title": "Bancolombia x Adobe: Forms Strategy and Partnership", "account": "Bancolombia SA", "region": "Latin America", "summit_attendees": ["Arun Taneja", "Melissa Reano"], "all_attendees": ["Arun Taneja", "Jorge Perez", "Melissa Reano", "Pablo Salcedo", "Sofia Arrambide"]}, {"code": "SCP3011", "title": "Suncorp x Adobe: Forms", "account": "Suncorp Corporate Services", "region": "APAC", "summit_attendees": ["Arun Taneja", "Melissa Reano"], "all_attendees": ["Anurag  Sharma", "Arun Taneja", "Becks Moring", "Christina Huynh", "Melissa Reano"]}, {"code": "SCP2639", "title": "Thrivent x Adobe: AEM Best Practices", "account": "Thrivent", "region": "US/Canada", "summit_attendees": ["Arun Taneja"], "all_attendees": ["Arun Taneja", "Elijah Johannigman", "Mike Dutter"]}, {"code": "SCP2975", "title": "Thrivent x Adobe: AEM Best Practices", "account": "Thrivent", "region": "US/Canada", "summit_attendees": ["Arun Taneja"], "all_attendees": ["Arun Taneja", "Elijah Johannigman"]}, {"code": "SCP2471", "title": "UT Dell Medical & Adobe: co-innovation opportunities Forms specific", "account": "University of Texas at Austin Dell Medical School", "region": "US/Canada", "summit_attendees": ["Arun Taneja", "Melissa Reano"], "all_attendees": ["Anurag  Sharma", "Arun Taneja", "Austen Trimble", "Brian Wood", "Colleen Goodwin", "Melissa Reano", "PJ Thompson"]}], "Conrad Woltge": [{"code":"SCP2318","title":"SAP X Adobe: AEM Assets Usage","account":"SAP","region":"EMEA","summit_attendees":["Conrad Woltge","Marc Angelinovich","Shankari Panchapakesan"],"all_attendees":["Boris Guhlman","Conrad Wöltge","Dirk  Bosserhoff","Marc Angelinovic","Shankari Panchapakesan"]}], "Corey Dulimba": [{"code": "SCP2125", "title": "Abercrombie x Adobe Agentic Roadmap", "account": "Abercrombie & Fitch", "region": "US/Canada", "summit_attendees": ["Corey Dulimba", "Martin Buergi"], "all_attendees": ["Anthony Slyter", "Christy Min", "Cindy  Spess", "Corey Dulimba", "Corrie Sahli", "Denise Alley", "Martin Buergi"]}, {"code": "SCP2164", "title": "AnF x Adobe | Agentic AEM Continued Discussion", "account": "Abercrombie & Fitch", "region": "US/Canada", "summit_attendees": ["Corey Dulimba", "Gilles Knobloch"], "all_attendees": ["Corey Dulimba", "Gilles Knobloch", "Justin Grosskurth"]}, {"code": "SCP2732", "title": "Choice Hotels | Adobe | AEM Agents & Orchestration", "account": "Choice Hotels", "region": "US/Canada", "summit_attendees": ["Corey Dulimba"], "all_attendees": ["Corey Dulimba", "Taylor  Lavelle"]}, {"code": "SCP1651", "title": "Microsoft & Adobe | Leveraging Adobe Agentic AI", "account": "Microsoft", "region": "US/Canada", "summit_attendees": ["Cedric Huesler", "Corey Dulimba", "Gilles Knobloch", "Gillian Krause", "Shankari Panchapakesan", "Shelly Chiang"], "all_attendees": ["Cedric Huesler", "Christiana Rezaii", "Corey Dulimba", "Gilles Knobloch", "Gillian Krause", "Jeremy Doblie", "Shankari Panchapakesan", "Shelly Chiang", "Srinivas Kanumuri", "Sydney Fitt"]}], "Nadine Wellman": [], "Sean Steiner": [], "Sreekanth Reddy": [{"code": "SCP2756", "title": "Adobe's Vision for Agentic Web Activation with Avalara", "account": "Avalara", "region": "US/Canada", "summit_attendees": ["Sreekanth Reddy"], "all_attendees": ["Deck Reyes", "Laurence  Krulik", "Sreekanth Reddy", "Tyler Bell"]}, {"code": "SCP2552", "title": "CarGurus x Adobe: Dynamic Chat", "account": "CarGurus, Inc.", "region": "US/Canada", "summit_attendees": ["Sreekanth Reddy"], "all_attendees": ["Mary Kate Hagenstein", "Sreekanth Reddy"]}, {"code": "SCP3195", "title": "Hitachi × Adobe Product Team: Agentic Web for Global Corporate Web & Intranet", "account": "Hitachi", "region": "APAC", "summit_attendees": ["Akhil Aggarwal", "Sreekanth Reddy"], "all_attendees": ["Akhil Aggarwal", "Anurag  Sharma", "Christian Ridge", "Haruna  Mishima", "Hiroyuki  Miyata", "Sreekanth Reddy", "Yusuke  Hakamaya"]}, {"code": "SCP3368", "title": "Inova Health + Brand Concierge", "account": "Inova Health System Foundation", "region": "US/Canada", "summit_attendees": ["Sreekanth Reddy"], "all_attendees": ["Megan Killeen", "Sreekanth Reddy"]}, {"code": "SCP1721", "title": "McKesson- Brand Concierge for B2B", "account": "McKesson Medical Surgical", "region": "US/Canada", "summit_attendees": ["Sreekanth Reddy"], "all_attendees": ["David Graybeal", "Sreekanth Reddy"]}, {"code": "SCP3271", "title": "Micron x Adobe: Brand Concierge", "account": "Micron Technology", "region": "US/Canada", "summit_attendees": ["Sreekanth Reddy"], "all_attendees": ["Bianca  Bekkers", "Diana Tarfulea", "Sasha Rizika", "Sreekanth Reddy"]}, {"code": "SCP2755", "title": "NVIDIA X Adobe: Brand Concierge Announcements and Partnership", "account": "NVIDIA", "region": "US/Canada", "summit_attendees": ["Sreekanth Reddy"], "all_attendees": ["Andy  Narayanan", "Jessica Brooks", "Maria Gimenez", "Sreekanth Reddy", "Tyler Bell"]}, {"code": "SCP2444", "title": "PWC & Adobe- Brand Concierge for PWC Signature Experience", "account": "PricewaterhouseCoopers (PwC)", "region": "US/Canada", "summit_attendees": ["Sreekanth Reddy"], "all_attendees": ["Andy  Narayanan", "Michelle Seitz", "Pavan Ghaie", "Sara Massey Rocha", "Sreekanth Reddy"]}, {"code": "SCP2717", "title": "S&P Global & Adobe Brand Concierge Summit Meeting", "account": "S&P Global", "region": "US/Canada", "summit_attendees": ["Sreekanth Reddy"], "all_attendees": ["Andy  Narayanan", "Jason Upton", "Sara Massey Rocha", "Sreekanth Reddy", "Zach Cheroff"]}, {"code": "TL2616", "title": "Workday x Adobe: Brand Concierge", "account": "Workday", "region": "US/Canada", "summit_attendees": ["Sreekanth Reddy"], "all_attendees": ["Andy  Narayanan", "Robert Pullen", "Sasha Rizika", "Sreekanth Reddy", "Tarun Arora"]}], "David Catalan": [], "Loni Stark": [{"code": "SCP1704", "title": "ATT / Adobe - AEM discussion focused on LLMO and Brand Concierge", "account": "AT&T", "region": "US/Canada", "summit_attendees": ["Loni Stark"], "all_attendees": ["Dan Davidson", "Danielle Vitale", "John Schuler", "Loni Stark"]}, {"code": "SCP2061", "title": "ALSAC x Adobe: Future of the Web", "account": "American Lebanese Syrian Associated Charities", "region": "US/Canada", "summit_attendees": ["Loni Stark"], "all_attendees": ["Jeff Pope", "Kelli  Nussbaum", "Loni Stark"]}, {"code": "SCP1556", "title": "Astra Zeneca x Adobe : Agentic Web", "account": "AstraZeneca", "region": "EMEA", "summit_attendees": ["Loni Stark", "Michael Marth", "Paolo Mottadelli"], "all_attendees": ["Anna Maher", "Loni Stark", "Michael Marth", "Paolo Mottadelli", "Preetham Yadav"]}, {"code": "SCP1718", "title": "Japan Customer (CASIO/Panasonic etc) x Adobe: Transforming D2C Business through Agentic Commerce", "account": "CASIO", "region": "APAC", "summit_attendees": ["Loni Stark"], "all_attendees": ["Haruna  Mishima", "Jumpei Oguri", "Keiichiro  Koga", "Loni Stark", "Manish Prabhune", "Scott Rigby"]}, {"code": "EF1469", "title": "CIBC x Adobe: AI-powered Content at Scale", "account": "Canadian Imperial Bank of Commerce (CIBC)", "region": "US/Canada", "summit_attendees": ["Loni Stark"], "all_attendees": ["Bertrand de Coatpont", "Loni Stark", "Sam Samad", "Steve Logan"]}, {"code": "SCP1599", "title": "Coca-Cola & Adobe: Innovation / Roadmap for AEM Assets and Sites", "account": "Coca-Cola", "region": "US/Canada", "summit_attendees": ["Loni Stark"], "all_attendees": ["Erin Koenig", "Jada Reid", "Loni Stark", "Nihar  Sanghavi"]}, {"code": "SCP1441", "title": "Eli Lilly x Adobe: Interconnected AEM", "account": "Eli Lilly", "region": "US/Canada", "summit_attendees": ["Loni Stark"], "all_attendees": ["Andrew Mulvaney", "Barbara  Gable", "Loni Stark", "Sean  Kelaghan"]}, {"code": "SCP2485", "title": "HeritageSG x Adobe: Executive Meeting with Loni Stark, VP Strategy & Product", "account": "HeritageSG", "region": "APAC", "summit_attendees": ["Loni Stark"], "all_attendees": ["Clarissa Nah", "Grace Chee", "Loni Stark", "Mel Lim"]}, {"code": "SCP2167", "title": "Brand Concierge - Executive alignment", "account": "MSC Cruises", "region": "EMEA", "summit_attendees": ["Loni Stark"], "all_attendees": ["Leonardo  Papa Malatesta", "Loni Stark", "Maxence Vuillaume", "Peter Klassen"]}, {"code": "SCP2710", "title": "Executive Strategy Discussion: Mayo Clinic & Adobe", "account": "Mayo Clinic", "region": "US/Canada", "summit_attendees": ["Loni Stark"], "all_attendees": ["George Strathern", "James Bohi", "Loni Stark"]}, {"code": "SCP1501", "title": "NFL x Adobe Agentic AI", "account": "National Football League (NFL)", "region": "US/Canada", "summit_attendees": ["Loni Stark"], "all_attendees": ["Duncan Owen", "Loni Stark", "Marissa Rexer"]}, {"code": "EF3281", "title": "Pearson x Adobe: Adobe Experience Cloud Digital Transformation", "account": "Pearson", "region": "EMEA", "summit_attendees": ["Loni Stark"], "all_attendees": ["Ally Lane", "Dave Justice", "Loni Stark", "Luke Lathen"]}, {"code": "SET2563", "title": "Sherwin-Williams x Adobe: Executive Alignment", "account": "Sherwin-Williams", "region": "US/Canada", "summit_attendees": ["Loni Stark"], "all_attendees": ["Anil Chakravarthy", "Ehren Hozumi", "Loni Stark", "Nathan Hermance", "Ross Armstrong"]}, {"code": "SCP2371", "title": "SiTime X Adobe - Digital Transformation (Succeeding with AEM + Commerce)", "account": "Sitime Corporation", "region": "US/Canada", "summit_attendees": ["Loni Stark"], "all_attendees": ["Andrew Keenan", "Joey Palladino", "Kristin Gray", "Loni Stark"]}, {"code": "SCP1876", "title": "Southwest Airlines x Adobe: Agentic Web & Content Supply Chain Integrations w/ Amadeus", "account": "Southwest Airlines", "region": "US/Canada", "summit_attendees": ["Loni Stark"], "all_attendees": ["Andy  Narayanan", "Loni Stark", "Marissa Rexer", "Zephan Fischl"]}, {"code": "SCP1685", "title": "Cross Platform Agentic AI Capabilities for Sun Life", "account": "Sun Life Assurance Company of Canada", "region": "US/Canada", "summit_attendees": ["Kay Sin", "Loni Stark"], "all_attendees": ["Justin Baker", "Kay Sin", "Loni Stark", "Lucas Cochrane"]}, {"code": "EF1757", "title": "T-Mobile x AEM: Future of Content with AEM and Agents", "account": "T-Mobile", "region": "US/Canada", "summit_attendees": ["Loni Stark"], "all_attendees": ["Chris Makiuchi", "Loni Stark", "Meredith Birkmeyer", "Thais Guimaraes"]}, {"code": "SCP1860", "title": "Toyota-Adobe eCommerce/Marketplace Roadmap Planning & Update", "account": "Toyota", "region": "APAC", "summit_attendees": ["Loni Stark"], "all_attendees": ["Adam  Backman", "Loni Stark", "Nicole Cornelson", "Ryan Dietz"]}, {"code": "SCP1675", "title": "Volvo x Adobe  - The Future of Spareparts Ordering", "account": "Volvo Trucks", "region": "EMEA", "summit_attendees": ["Loni Stark"], "all_attendees": ["Brian Rosbog", "Franck Attia", "Joshua Young", "Loni Stark", "Mads Mortensen"]}, {"code": "SCP2045", "title": "Walmart", "account": "Walmart", "region": "US/Canada", "summit_attendees": ["Loni Stark", "Marc Angelinovich"], "all_attendees": ["Brent Rudewick", "Kaci Smith", "Loni Stark", "Marc Angelinovich", "Tony Galindo"]}], "Hyman Chung": [{"code": "SCP2401", "title": "Red Cross x Adobe: Sites Optimizer + LLM Optimizer", "account": "American Red Cross", "region": "US/Canada", "summit_attendees": ["Aditi Dutt Chaudhuri", "Hyman Chung"], "all_attendees": ["Aditi Dutt Chaudhuri", "Hyman Chung", "Jonathan Mak", "Steven Anderson"]}, {"code": "SCP1698", "title": "Centene x Adobe: Sites Optimizer", "account": "Centene", "region": "US/Canada", "summit_attendees": ["Hyman Chung", "Kathie Yang"], "all_attendees": ["Hyman Chung", "Joe Houts", "Kathie Yang"]}, {"code": "SCP2748", "title": "Gen Digital & Adobe", "account": "Gen Digital", "region": "US/Canada", "summit_attendees": ["Hyman Chung"], "all_attendees": ["Deck Reyes", "Hyman Chung", "Jason Dausey", "Jeremy Buchanan", "Sasha Rizika"]}, {"code": "SCP2644", "title": "Kroger x Adobe: ASO", "account": "The Kroger Co", "region": "US/Canada", "summit_attendees": ["Hyman Chung", "Karthik Muralidharan"], "all_attendees": ["Christy Min", "Hyman Chung", "Karthik Muralidharan", "Laurence  Krulik", "Will Henry"]}], "Gillian Krause": [{"code": "SCP2099", "title": "DigiCert & Adobe | EDS Conversation", "account": "DigiCert", "region": "US/Canada", "summit_attendees": ["Amol Anand", "Gillian Krause"], "all_attendees": ["Amol Anand", "Gillian Krause", "Joseph Stewart"]}, {"code": "SCP1543", "title": "Kaiser Permanente x Adobe: AEM Move to Cloud with EDS - Product Discussion", "account": "Kaiser Permanente", "region": "US/Canada", "summit_attendees": ["Amol Anand", "Cedric Huesler", "Gillian Krause", "Haresh Kumar"], "all_attendees": ["Amol Anand", "Cedric Huesler", "George Strathern", "Gillian Krause", "Haresh Kumar", "Keith Burrows"]}, {"code": "SCP1648", "title": "Microsoft & Adobe | Cloud Services/EDS/Azure Alignment", "account": "Microsoft", "region": "US/Canada", "summit_attendees": ["Amol Anand", "Gillian Krause", "Mitch Nelson"], "all_attendees": ["Amol Anand", "Christiana Rezaii", "Gillian Krause", "Mitch Nelson", "Sydney Fitt"]}, {"code": "SCP1651", "title": "Microsoft & Adobe | Leveraging Adobe Agentic AI", "account": "Microsoft", "region": "US/Canada", "summit_attendees": ["Cedric Huesler", "Corey Dulimba", "Gilles Knobloch", "Gillian Krause", "Shankari Panchapakesan", "Shelly Chiang"], "all_attendees": ["Cedric Huesler", "Christiana Rezaii", "Corey Dulimba", "Gilles Knobloch", "Gillian Krause", "Jeremy Doblie", "Shankari Panchapakesan", "Shelly Chiang", "Srinivas Kanumuri", "Sydney Fitt"]}, {"code": "SCP3010", "title": "Suncorp x Adobe: Edge Delivery Services", "account": "Suncorp Corporate Services", "region": "APAC", "summit_attendees": ["Gillian Krause"], "all_attendees": ["Becks Moring", "Christina Huynh", "Gillian Krause"]}], "Cecily Liu": [{"code": "SCP2886", "title": "ASUS x Adobe: AI-First website: Brand Concierge future", "account": "ASUS", "region": "APAC", "summit_attendees": ["Cecily Liu", "Max Iguer"], "all_attendees": ["Alan Chan", "Cecily  Liu", "Max Iguer", "Michelle Wu"]}, {"code": "SCP3316", "title": "ASUS | AI-First website: Brand Concierge future", "account": "ASUS", "region": "APAC", "summit_attendees": ["Cecily Liu", "Max Iguer"], "all_attendees": ["Alan Chan", "Andy  Narayanan", "Cecily  Liu", "Max Iguer", "Michelle Wu"]}, {"code": "SCP2734", "title": "Bridgestone x Adobe: Brand Concierge Overview", "account": "Bridgestone", "region": "APAC", "summit_attendees": ["Cecily Liu", "Max Iguer"], "all_attendees": ["Andy  Narayanan", "Cecily  Liu", "Christy Min", "Cindy  Spess", "Corrie Sahli", "Kristen Witous", "Max Iguer"]}, {"code": "SCP1367", "title": "Vanguard x Adobe: AEM Cloud - Migration to Cloud", "account": "Vanguard Group", "region": "US/Canada", "summit_attendees": ["Cecily Liu", "Cedric Huesler"], "all_attendees": ["Cecily  Liu", "Cedric Huesler", "Julian  Lopez", "Matt  Downing", "Nicole Diette"]}], "Tatyana Kozachek": [], "Dirk Rudolph": [], "Melissa Reano": [{"code": "SCP2312", "title": "Bancolombia x Adobe: Forms Strategy and Partnership", "account": "Bancolombia SA", "region": "Latin America", "summit_attendees": ["Arun Taneja", "Melissa Reano"], "all_attendees": ["Arun Taneja", "Jorge Perez", "Melissa Reano", "Pablo Salcedo", "Sofia Arrambide"]}, {"code": "SCP2653", "title": "Keysight x Adobe: Site Optimizer", "account": "Keysight Technologies", "region": "US/Canada", "summit_attendees": ["Melissa Reano"], "all_attendees": ["Laurence  Krulik", "Meghan Butler", "Melissa Reano"]}, {"code": "SCP1480", "title": "NFL x Adobe: AEM Forms Agentic AI Authoring- AEM Site Migrations", "account": "National Football League (NFL)", "region": "US/Canada", "summit_attendees": ["Melissa Reano"], "all_attendees": ["Caitlin McLaughlin", "Dominick Diminni", "Duncan Owen", "Melissa Reano", "Monique Misrahi"]}, {"code": "SCP3011", "title": "Suncorp x Adobe: Forms", "account": "Suncorp Corporate Services", "region": "APAC", "summit_attendees": ["Arun Taneja", "Melissa Reano"], "all_attendees": ["Anurag  Sharma", "Arun Taneja", "Becks Moring", "Christina Huynh", "Melissa Reano"]}, {"code": "SCP2471", "title": "UT Dell Medical & Adobe: co-innovation opportunities Forms specific", "account": "University of Texas at Austin Dell Medical School", "region": "US/Canada", "summit_attendees": ["Arun Taneja", "Melissa Reano"], "all_attendees": ["Anurag  Sharma", "Arun Taneja", "Austen Trimble", "Brian Wood", "Colleen Goodwin", "Melissa Reano", "PJ Thompson"]}], "Felix Delval": [{"code": "SCP2101", "title": "Nutrafol and Adobe Sites Meeting", "account": "Nutraceutical Wellness", "region": "US/Canada", "summit_attendees": ["Felix Delval"], "all_attendees": ["Dustin Vaughn", "Felix Delval", "William Haas"]}], "Akhil Aggarwal": [{"code": "SCP3195", "title": "Hitachi × Adobe Product Team: Agentic Web for Global Corporate Web & Intranet", "account": "Hitachi", "region": "APAC", "summit_attendees": ["Akhil Aggarwal", "Sreekanth Reddy"], "all_attendees": ["Akhil Aggarwal", "Anurag  Sharma", "Christian Ridge", "Haruna  Mishima", "Hiroyuki  Miyata", "Sreekanth Reddy", "Yusuke  Hakamaya"]}, {"code": "SCP2022", "title": "Maruti Suzuki x Adobe: Brand Discoverability GTM", "account": "Maruti Suzuki", "region": "APAC", "summit_attendees": ["Akhil Aggarwal"], "all_attendees": ["Akhil Aggarwal", "Andy  Narayanan", "Sameer Jain", "Satyajeet Darak", "Vikas Yadav"]}], "Olena Kochis": [{"code": "SCP2888", "title": "SAP X Adobe: WebSDK Implementation", "account": "SAP", "region": "EMEA", "summit_attendees": ["Olena Kochis"], "all_attendees": ["Ali Nazer", "Armin Flossmann", "Boris Guhlman", "Malena Gavin", "Mitch Rice", "Niranjan Kumbi", "Olena Kochis", "Sunil Prasad"]}], "Michael Marth": [{"code": "SCP1556", "title": "Astra Zeneca x Adobe : Agentic Web", "account": "AstraZeneca", "region": "EMEA", "summit_attendees": ["Loni Stark", "Michael Marth", "Paolo Mottadelli"], "all_attendees": ["Anna Maher", "Loni Stark", "Michael Marth", "Paolo Mottadelli", "Preetham Yadav"]}, {"code": "SCP1384", "title": "Eli Lilly x Adobe: Structuring Web for Success", "account": "Eli Lilly", "region": "US/Canada", "summit_attendees": ["Amol Anand", "Karthik Muralidharan", "Michael Marth"], "all_attendees": ["Amol Anand", "Andrew Mulvaney", "Barbara  Gable", "Erik Cottrell", "Karthik Muralidharan", "Michael Marth", "Sean  Kelaghan"]}, {"code": "SCP1492", "title": "Signet x Adobe: Product Leadership Executive Connect", "account": "Signet Jewelers", "region": "US/Canada", "summit_attendees": ["Michael Marth"], "all_attendees": ["Anthony Slyter", "Christy Min", "Cindy  Spess", "Corrie Sahli", "Denise Alley", "Michael Marth", "Tara Pagni"]}], "Adam Pazik": [{"code": "TL2899", "title": "AEMCaaS for Citi: Readiness, Risk, and Execution", "account": "Citibank", "region": "US/Canada", "summit_attendees": ["Adam Pazik"], "all_attendees": ["Adam Pazik", "Luke Pardi", "Maureen  Shockey"]}, {"code": "SCP1387", "title": "AEMCaaS for Morgan Stanley: Readiness, Risk, and the Roadmap", "account": "MS FINANCING LLC", "region": "US/Canada", "summit_attendees": ["Adam Pazik", "Haresh Kumar"], "all_attendees": ["Adam Pazik", "Anand Chopra", "Haresh Kumar", "K-Yun  Steele", "Luke Pardi", "Maureen  Shockey", "Oren Herzenberg"]}, {"code": "SCP2314", "title": "Nation Bank x Adobe: AEM Cloud Service Strategic Partnership", "account": "National Bank of Canada", "region": "US/Canada", "summit_attendees": ["Adam Pazik"], "all_attendees": ["Adam Pazik", "Stephane  LeSieur"]}, {"code": "SCP2331", "title": "T-Mobile Magenta Pulse + Adobe: The Future of AEM Authoring, Personalization & AI Agents", "account": "T-Mobile", "region": "US/Canada", "summit_attendees": ["Adam Pazik", "Alexander Saar"], "all_attendees": ["Adam Pazik", "Alexander Saar", "Meredith Birkmeyer", "Thais Guimaraes"]}, {"code": "SCP2743", "title": "AEM Cloud + Edge Delivery Services (EDS) Best Practices and where LLMO/ASO/Brand Concierge fit in", "account": "Toyota", "region": "APAC", "summit_attendees": ["Adam Pazik", "Alexander Saar"], "all_attendees": ["Adam  Backman", "Adam Pazik", "Alexander Saar", "Yuji Nakagawa"]}, {"code": "SCP2221", "title": "Villanova and Adobe AEM Cloud, EDS & Design Discussion", "account": "Villanova University - 269852", "region": "US/Canada", "summit_attendees": ["Adam Pazik"], "all_attendees": ["Adam Pazik", "Dustin Vaughn", "William Haas"]}], "Darin Kuntze": [{"code": "SCP2197", "title": "HPE | Adobe: AEM Strategy & Innovations", "account": "Hewlett Packard Enterprise (HPE)", "region": "US/Canada", "summit_attendees": ["Darin Kuntze"], "all_attendees": ["Darin Kuntze", "Nicole Cachia", "Sean Sehnem", "Tyler Bell"]}, {"code": "SCP1451", "title": "The future of EDS and Sites Optimizer for Volvo", "account": "Volvo Trucks", "region": "EMEA", "summit_attendees": ["Darin Kuntze"], "all_attendees": ["Brian Rosbog", "Darin Kuntze", "David Nuescheler"]}], "David Folk": [{"code": "SCP2510", "title": "CVS & Adobe: Agentic Brand Activation Solutions Overview / Connect", "account": "Cvs Health", "region": "US/Canada", "summit_attendees": ["David Folk", "Karthik Muralidharan"], "all_attendees": ["Ali Colman", "Bill  Farnsworth", "Carina Starr", "David Folk", "Kalia Perse", "Karthik Muralidharan", "Laurence  Krulik", "Scott Segrin"]}, {"code": "SCP2751", "title": "Adobe // EM – Future of AEM Discussion", "account": "Enterprise Holdings", "region": "US/Canada", "summit_attendees": ["David Folk", "Karthik Muralidharan"], "all_attendees": ["David Folk", "Jonathan Mak", "Karthik Muralidharan", "Taylor Smith", "Tom McCullough"]}], "Mayank Gaur": [{"code": "SCP1422", "title": "Eli Lilly x Adobe: Delivering Content", "account": "Eli Lilly", "region": "US/Canada", "summit_attendees": ["Mayank Gaur"], "all_attendees": ["Andrew Mulvaney", "Barbara  Gable", "Erik Cottrell", "Mayank Gaur", "Sean  Kelaghan"]}, {"code": "SCP1369", "title": "Red Hat | AEM / Dynamic Media Open API", "account": "Red Hat", "region": "US/Canada", "summit_attendees": ["Mayank Gaur"], "all_attendees": ["Abby Brooks", "Anna Beimford", "Mayank Gaur"]}], "John Tapley": [], "Anurag Sharma": [{"code": "SCP3195", "title": "Hitachi × Adobe Product Team: Agentic Web for Global Corporate Web & Intranet", "account": "Hitachi", "region": "APAC", "summit_attendees": ["Akhil Aggarwal", "Anurag Sharma", "Sreekanth Reddy"], "all_attendees": ["Akhil Aggarwal", "Anurag  Sharma", "Christian Ridge", "Haruna  Mishima", "Hiroyuki  Miyata", "Sreekanth Reddy", "Yusuke  Hakamaya"]}, {"code": "SCP3011", "title": "Suncorp x Adobe: Forms", "account": "Suncorp Corporate Services", "region": "APAC", "summit_attendees": ["Anurag Sharma", "Arun Taneja", "Melissa Reano"], "all_attendees": ["Anurag  Sharma", "Arun Taneja", "Becks Moring", "Christina Huynh", "Melissa Reano"]}, {"code": "SCP2471", "title": "UT Dell Medical & Adobe: co-innovation opportunities Forms specific", "account": "University of Texas at Austin Dell Medical School", "region": "US/Canada", "summit_attendees": ["Anurag Sharma", "Arun Taneja", "Melissa Reano"], "all_attendees": ["Anurag  Sharma", "Arun Taneja", "Austen Trimble", "Brian Wood", "Colleen Goodwin", "Melissa Reano", "PJ Thompson"]}], "Chris Millar": [{"code": "SCP2718", "title": "Colgate - Palmolive AEM EDS", "account": "Colgate-Palmolive Company", "region": "US/Canada", "summit_attendees": ["Chris Millar", "Nikunj Merchant"], "all_attendees": ["Anthony Slyter", "Chris Helin", "Chris Millar", "Jennifer Slaughter", "May Sari-Scoggins", "Mike Neumann", "Nikunj Merchant", "Shawn Mccarthy"]}, {"code": "SCP2361", "title": "Genmab & Adobe: AEM EDS and it's value", "account": "Genmab", "region": "EMEA", "summit_attendees": ["Chris Millar"], "all_attendees": ["Chris Millar", "David Nuescheler", "Dean Macke", "Lindsey Byroads"]}, {"code": "SCP1971", "title": "Jet2 on EDS: Challenges and Opportunities", "account": "Jet2.com", "region": "EMEA", "summit_attendees": ["Chris Millar"], "all_attendees": ["Chris Millar", "Elisa Cairoli"]}, {"code": "SCP2746", "title": "AEM Sites Modernization (+EDS) with Lumen", "account": "Lumen", "region": "US/Canada", "summit_attendees": ["Chris Millar", "Paolo Mottadelli"], "all_attendees": ["Chris Millar", "Isaac Nikar", "Paolo Mottadelli"]}, {"code": "SCP2185", "title": "Lumen Technologies x Adobe: AEM Sites Modernization + Edge Delivery / EMA", "account": "Not Listed", "region": "Unknown", "summit_attendees": ["Chris Millar"], "all_attendees": ["Cheryl Nordin", "Chris Millar", "Jian  Huang"]}], "Shruti Jagtap": [], "Jamie Brighton": [{"code": "SCP2209", "title": "OneMedical + Adobe Content Supply Chain Review", "account": "Amazon Web Services", "region": "US/Canada", "summit_attendees": ["Jamie Brighton"], "all_attendees": ["Aniket Sharma", "Denis  Featovic", "Fariz Mohamed", "Jamie Brighton", "Lisa Gorman"]}, {"code": "SCP3321", "title": "Adobe X TUI: Brand Visibility on Web & App in the Agentic Era", "account": "TUI Group", "region": "EMEA", "summit_attendees": ["Haresh Kumar", "Jamie Brighton"], "all_attendees": ["Haresh Kumar", "Jake Wingfield", "Jamie Brighton", "Sheena Tomar"]}], "Mark Szulc": [{"code": "SCP3314", "title": "CUB x Adobe: AEM Product Meeting", "account": "Cathay United Bank", "region": "APAC", "summit_attendees": ["Mark Szulc"], "all_attendees": ["Alan Chan", "Mark Szulc"]}, {"code": "SCP1950", "title": "(DNP, Macnica, Mitsubishi) x Adobe: Building a Scalable Content Supply Chain for Personalized Engagement", "account": "Japan B2B Customers,  (Macnica, Dainippon printing, Mitsubishi)", "region": "APAC", "summit_attendees": ["Mark Szulc"], "all_attendees": ["Haruna  Mishima", "Keiichiro  Koga", "Manish Prabhune", "Mark Szulc", "Yukitaka Matsumoto"]}, {"code": "SCP2416", "title": "Plaza Premium Group x Adobe: Executive Meeting", "account": "Plaza Premium Group", "region": "APAC", "summit_attendees": ["Mark Szulc"], "all_attendees": ["Alan Chan", "Ankur  Katiyar", "Ashu Srivastava", "Hin Ma", "Jeremy Wood", "Mark Szulc", "Sunil Menon", "Tanya  Chan"]}, {"code": "SCP2782", "title": "RACV x Adobe: Moving to AEM Cloud Service (Edge Delivery Services)", "account": "Royal Automobile Club of Victoria (RACV) Limited", "region": "APAC", "summit_attendees": ["Mark Szulc"], "all_attendees": ["Mark Szulc", "Mayank Kool", "Sunny Wan", "Zoran Nikolovski"]}], "Shankari Panchapakesan": [{"code": "SCP2352", "title": "Dayforce X Adobe: Leadership Meet & Greet", "account": "Dayforce", "region": "US/Canada", "summit_attendees": ["Shankari Panchapakesan"], "all_attendees": ["David Weintraub", "Gregory Kiey", "Jeffrey  Stevens", "Shankari Panchapakesan"]}, {"code": "SCP1651", "title": "Microsoft & Adobe | Leveraging Adobe Agentic AI", "account": "Microsoft", "region": "US/Canada", "summit_attendees": ["Cedric Huesler", "Corey Dulimba", "Gilles Knobloch", "Gillian Krause", "Shankari Panchapakesan", "Shelly Chiang"], "all_attendees": ["Cedric Huesler", "Christiana Rezaii", "Corey Dulimba", "Gilles Knobloch", "Gillian Krause", "Jeremy Doblie", "Shankari Panchapakesan", "Shelly Chiang", "Srinivas Kanumuri", "Sydney Fitt"]}, {"code": "SCP2318", "title": "SAP X Adobe: AEM Assets Usage", "account": "SAP", "region": "EMEA", "summit_attendees": ["Marc Angelinovich", "Shankari Panchapakesan"], "all_attendees": ["Boris Guhlman", "Conrad Wöltge", "Dirk  Bosserhoff", "Marc Angelinovich", "Shankari Panchapakesan"]}, {"code": "SCP2329", "title": "T-Mobile Magenta Pulse + Adobe: The Future of AEM Authoring, Personalization & AI Agents", "account": "T-Mobile", "region": "US/Canada", "summit_attendees": ["Cedric Huesler", "Shankari Panchapakesan"], "all_attendees": ["Cedric Huesler", "Meredith Birkmeyer", "Shankari Panchapakesan", "Thais Guimaraes"]}], "Mitch Nelson": [{"code": "SCP1696", "title": "Adobe x AWS: Modern AEM Architecture for Growth & Flexibility", "account": "Amazon Web Services", "region": "US/Canada", "summit_attendees": ["Gilles Knobloch", "Mitch Nelson"], "all_attendees": ["Aniket Sharma", "Dan Foy", "David Benge", "Fariz Mohamed", "Gilles Knobloch", "Lisa Gorman", "Mitch Nelson"]}, {"code": "SCP2204", "title": "Amazon Ads: AEM in China Discussion", "account": "Amazon Web Services", "region": "US/Canada", "summit_attendees": ["Mitch Nelson"], "all_attendees": ["Aniket Sharma", "Fariz Mohamed", "Lisa Gorman", "Mark  Shubin", "Mitch Nelson", "Nathan Farner"]}, {"code": "SCP1648", "title": "Microsoft & Adobe | Cloud Services/EDS/Azure Alignment", "account": "Microsoft", "region": "US/Canada", "summit_attendees": ["Amol Anand", "Gillian Krause", "Mitch Nelson"], "all_attendees": ["Amol Anand", "Christiana Rezaii", "Gillian Krause", "Mitch Nelson", "Sydney Fitt"]}], "Tina Ngo": [{"code": "SCP1745", "title": "Masco & Adobe: Agentic Web", "account": "Masco", "region": "US/Canada", "summit_attendees": ["Tina Ngo"], "all_attendees": ["Adrienne Embery-Good", "JD  Price", "Joseph Stewart", "Tina Ngo"]}], "Meryll Blanchet": [{"code": "SCP1596", "title": "ATT / Adobe - LLMO and CJA integration", "account": "AT&T", "region": "US/Canada", "summit_attendees": ["Aditi Dutt Chaudhuri", "Meryll Blanchet"], "all_attendees": ["Aditi Dutt Chaudhuri", "Dan Davidson", "Danielle Vitale", "John Schuler", "Jonathan Mak", "Meryll Blanchet"]}, {"code": "SCP2998", "title": "Adobe // KDP - LLMO & Agentic Web", "account": "DPS Holdings", "region": "EMEA", "summit_attendees": ["Kathie Yang", "Meryll Blanchet"], "all_attendees": ["Kathie Yang", "Laurence  Krulik", "Meryll Blanchet", "Tom McCullough"]}, {"code": "SCP2415", "title": "LG Electronics x Adobe: Executive Discussion on LLMO Strategy & D2C Innovation", "account": "LG Electronics", "region": "APAC", "summit_attendees": ["Aditi Dutt Chaudhuri", "Meryll Blanchet"], "all_attendees": ["Aditi Dutt Chaudhuri", "Aswathy Maharaj", "Christian Ridge", "Jihyung Kim", "Meryll Blanchet", "Sanghan  Lee", "Seho  Roh", "Unji Bak", "YJ Park"]}, {"code": "SCP1404", "title": "MLB x LLMO and Agentic Web", "account": "Major League Baseball (MLB)", "region": "US/Canada", "summit_attendees": ["Aditi Dutt Chaudhuri", "Meryll Blanchet"], "all_attendees": ["Aditi Dutt Chaudhuri", "Brian Au", "Jonathan Mak", "Megan Riddick", "Meryll Blanchet", "Shakira Chanrai"]}, {"code": "SCP1960", "title": "Manulife x Adobe: LLM Optimizer Meeting with Adobe Product Team", "account": "Manulife", "region": "US/Canada", "summit_attendees": ["Aditi Dutt Chaudhuri", "Meryll Blanchet"], "all_attendees": ["Adeel Abbasi", "Aditi Dutt Chaudhuri", "Lucas Cochrane", "Meryll Blanchet"]}, {"code": "SCP3129", "title": "Adobe & PWC LLMO Discussion", "account": "PricewaterhouseCoopers (PwC)", "region": "US/Canada", "summit_attendees": ["Meryll Blanchet"], "all_attendees": ["Jason Upton", "Meryll Blanchet", "Rishabh Dayal", "Sara Massey Rocha", "Zach Cheroff"]}, {"code": "SCP2246", "title": "Travel Guard x Adobe: Value of LLM Optimizer", "account": "Travel Guard", "region": "US/Canada", "summit_attendees": ["Aditi Dutt Chaudhuri", "Meryll Blanchet"], "all_attendees": ["Aditi Dutt Chaudhuri", "Christina Browning", "Meryll Blanchet", "Sarah Warren"]}], "Karl Pauls": [], "Clint Goodie Nice": [], "Haresh Kumar": [{"code": "SCP1699", "title": "AIG x Adobe: What a move to AEM cloud unlocks", "account": "AIG General Insurance", "region": "US/Canada", "summit_attendees": ["Haresh Kumar"], "all_attendees": ["Christina Browning", "Haresh Kumar", "Oren Herzenberg", "Sarah Warren"]}, {"code": "SCP1403", "title": "Chubb x Adobe: AEM and AI Product Meeting", "account": "Chubb", "region": "US/Canada", "summit_attendees": ["Haresh Kumar"], "all_attendees": ["David Ford", "Haresh Kumar", "John Green", "Kira Bui", "Michael Lacy", "Vi Murphy"]}, {"code": "SCP2155", "title": "Cigna x Adobe Meeting", "account": "Cigna", "region": "US/Canada", "summit_attendees": ["Haresh Kumar"], "all_attendees": ["George Strathern", "Haresh Kumar", "Lauren Merker", "Whitney Patton"]}, {"code": "SCP2838", "title": "Delta + Adobe | Migration from AEM 6.5 to Cloud Sites", "account": "Delta Air Lines", "region": "US/Canada", "summit_attendees": ["Haresh Kumar"], "all_attendees": ["Haresh Kumar", "Jennie McGuire", "John Cummins", "Julie Reina", "Lia Ferrandini"]}, {"code": "SCP1687", "title": "FedEx | Adobe | AEM Product Leadership", "account": "Federal Express (FedEx)", "region": "US/Canada", "summit_attendees": ["Haresh Kumar"], "all_attendees": ["Haresh Kumar", "Lauren Sisneros", "Ted Weller"]}, {"code": "SCP1954", "title": "IndusInd Bank x Adobe : Content Supply Chain & Agentic AI", "account": "IndusInd Bank Ltd", "region": "APAC", "summit_attendees": ["Haresh Kumar"], "all_attendees": ["Haresh Kumar", "Ranjit kumar Sahoo", "Varun Parmar", "Venu Juvvala"]}, {"code": "SCP1874", "title": "Japan B2B Customer x Building a Scalable Content Supply Chain for Personalized Engagement", "account": "Japanese B2B customers", "region": "APAC", "summit_attendees": ["Haresh Kumar"], "all_attendees": ["Haresh Kumar", "Yukitaka Matsumoto"]}, {"code": "SCP1543", "title": "Kaiser Permanente x Adobe: AEM Move to Cloud with EDS - Product Discussion", "account": "Kaiser Permanente", "region": "US/Canada", "summit_attendees": ["Amol Anand", "Cedric Huesler", "Gillian Krause", "Haresh Kumar"], "all_attendees": ["Amol Anand", "Cedric Huesler", "George Strathern", "Gillian Krause", "Haresh Kumar", "Keith Burrows"]}, {"code": "SCP1387", "title": "AEMCaaS for Morgan Stanley: Readiness, Risk, and the Roadmap", "account": "MS FINANCING LLC", "region": "US/Canada", "summit_attendees": ["Adam Pazik", "Haresh Kumar"], "all_attendees": ["Adam Pazik", "Anand Chopra", "Haresh Kumar", "K-Yun  Steele", "Luke Pardi", "Maureen  Shockey", "Oren Herzenberg"]}, {"code": "TL2511", "title": "Mayo Clinic X Adobe : Experience Modernization on AEM", "account": "Mayo Clinic", "region": "US/Canada", "summit_attendees": ["Haresh Kumar"], "all_attendees": ["Haresh Kumar", "Karolina Nowak", "Whitney Patton"]}, {"code": "SCP2087", "title": "Publicis & Adobe: AEM Assets deep dive", "account": "PUBLICIS", "region": "EMEA", "summit_attendees": ["Haresh Kumar"], "all_attendees": ["Haresh Kumar", "Jonathan Geismar", "Wynn Muse"]}, {"code": "EF2462", "title": "Paychex + Adobe: Digital Self Service", "account": "Paychex", "region": "US/Canada", "summit_attendees": ["Haresh Kumar"], "all_attendees": ["Andrew Berman", "Haresh Kumar", "Michael  O'Neill", "Sean McCall", "Tyler Bell"]}, {"code": "SCP1457", "title": "Paychex + Adobe: Digital Self Service", "account": "Paychex", "region": "US/Canada", "summit_attendees": ["Haresh Kumar"], "all_attendees": ["Andrea  DiManno", "Andrew Berman", "Haresh Kumar", "Michael  O'Neill", "Sean McCall", "Tyler Bell"]}, {"code": "SCP2504", "title": "PwC x Adobe Partner Meeting || Content (AEM & GTM Roadmap)", "account": "PricewaterhouseCoopers (PwC)", "region": "US/Canada", "summit_attendees": ["Haresh Kumar"], "all_attendees": ["Haresh Kumar", "Marc Pruskin", "Nishant Kapoor"]}, {"code": "SCP3321", "title": "Adobe X TUI: Brand Visibility on Web & App in the Agentic Era", "account": "TUI Group", "region": "EMEA", "summit_attendees": ["Haresh Kumar", "Jamie Brighton"], "all_attendees": ["Haresh Kumar", "Jake Wingfield", "Jamie Brighton", "Sheena Tomar"]}, {"code": "SCP3325", "title": "Content Supply Chain for Unipol", "account": "Unipol", "region": "EMEA", "summit_attendees": ["Haresh Kumar"], "all_attendees": ["Alex Gordiani", "Barbara Moretti", "Haresh Kumar"]}], "Shelly Chiang": [{"code": "SCP2200", "title": "AEM Assets", "account": "Caterpillar", "region": "US/Canada", "summit_attendees": ["Shelly Chiang"], "all_attendees": ["Andrew Berman", "Mary McIntosh", "Shelly Chiang"]}, {"code": "SCP2377", "title": "Product Owner Asstes", "account": "Corning", "region": "US/Canada", "summit_attendees": ["Shelly Chiang"], "all_attendees": ["Mary McIntosh", "Shelly Chiang"]}, {"code": "SCP3356", "title": "Grand Circle x Adobe: Dynamic Media + AEM Assets Working Session", "account": "Grand Circle LLC", "region": "US/Canada", "summit_attendees": ["Shelly Chiang"], "all_attendees": ["David Ford", "Duncan Owen", "Shelly Chiang"]}, {"code": "SCP1982", "title": "MSCI X Adobe: Dynamic Media Content Creation", "account": "MSCI", "region": "US/Canada", "summit_attendees": ["Shelly Chiang"], "all_attendees": ["Drew Kelley", "Shelly Chiang"]}, {"code": "SCP1651", "title": "Microsoft & Adobe | Leveraging Adobe Agentic AI", "account": "Microsoft", "region": "US/Canada", "summit_attendees": ["Cedric Huesler", "Corey Dulimba", "Gilles Knobloch", "Gillian Krause", "Shankari Panchapakesan", "Shelly Chiang"], "all_attendees": ["Cedric Huesler", "Christiana Rezaii", "Corey Dulimba", "Gilles Knobloch", "Gillian Krause", "Jeremy Doblie", "Shankari Panchapakesan", "Shelly Chiang", "Srinivas Kanumuri", "Sydney Fitt"]}]};
+
+const ATTENDEES=[
+  {name:'Loni Stark',title:'VP, Product',group:'PM'},
+  {name:'Alexander Saar',title:'VP, Engineering',group:'Engineering'},
+  {name:'Michael Marth',title:'VP, Engineering',group:'Engineering'},
+  {name:'Gilles Knobloch',title:'Director of Engineering',group:'Engineering'},
+  {name:'Cedric Huesler',title:'Sr. Director, Product Management',group:'PM'},
+  {name:'Haresh Kumar',title:'Sr. Director Product Marketing',group:'PMM'},
+  {name:'Max Iguer',title:'Principal Product Marketing Manager',group:'PMM'},
+  {name:'Jamie Brighton',title:'Director, PMM AEM EMEA',group:'PMM'},
+  {name:'Mark Szulc',title:'Group Manager, Product Marketing, AEM JAPAC region',group:'PMM'},
+  {name:'Karthik Muralidharan',title:'Group Manager, Product Marketing',group:'PMM'},
+  {name:'Shelly Chiang',title:'Principal PMM',group:'PMM'},
+  {name:'Marc Angelinovich',title:'Director, AEM Assets Product Marketing',group:'PMM'},
+  {name:'Vaishnav Gorur',title:'Director of PMM, AEM Sites',group:'PMM'},
+  {name:'Pauline Huynh',title:'Sr. PMM',group:'PMM'},
+  {name:'Nikunj Merchant',title:'Principal PMM',group:'PMM'},
+  {name:'Tina Ngo',title:'Principal PMM',group:'PMM'},
+  {name:'Kathie Yang',title:'Sr. PMM',group:'PMM'},
+  {name:'Melissa Reano',title:'Sr. PMM',group:'PMM'},
+  {name:'Arun Taneja',title:'Director, PM',group:'PM'},
+  {name:'Corey Dulimba',title:'Group PM Manager',group:'PM'},
+  {name:'Greg Klebus',title:'Group PM Manager',group:'PM'},
+  {name:'Nick Whittenburg',title:'Sr. Product Manager',group:'PM'},
+  {name:'Mayank Gaur',title:'PM: Sr. Product Manager',group:'PM'},
+  {name:'John Tapley',title:'PM: Principal Product Manager',group:'PM'},
+  {name:'Aditi Dutt Chaudhuri',title:'Principal PM',group:'PM'},
+  {name:'David Folk',title:'Director, PM',group:'PM'},
+  {name:'Kay Sin',title:'Product Manager',group:'PM'},
+  {name:'Gabriel Walt',title:'Sr. PM',group:'PM'},
+  {name:'Martin Buergi',title:'Principal PM',group:'PM'},
+  {name:'Shankari Panchapakesan',title:'Group PM Manager',group:'PM'},
+  {name:'Brian Chaikelson',title:'Principal PM',group:'PM'},
+  {name:'Hyman Chung',title:'Principal PM',group:'PM'},
+  {name:'Anurag Sharma',title:'Sr Manager, PM',group:'PM'},
+  {name:'Sreekanth Reddy',title:'Principal Product Manager',group:'PM'},
+  {name:'Olena Kochis',title:'Product Manager',group:'PM'},
+  {name:'Cecily Liu',title:'Principal Product Manager',group:'PM'},
+  {name:'Akhil Aggarwal',title:'Sr. Product Manager',group:'PM'},
+  {name:'Gitesh Malik',title:'Senior Director, Assets',group:'Engineering'},
+  {name:'Tatyana Kozachek',title:'AEM GTM Operations',group:'PMM'},
+  {name:'Felix Delval',title:'Sr. Engineering Manager',group:'Engineering'},
+  {name:'Meryll Blanchet',title:'Sr. Manager, Software Development',group:'Engineering'},
+  {name:'Dirk Rudolph',title:'Sr. Engineering Manager',group:'Engineering'},
+  {name:'Conrad Woltge',title:'Sr. Principal Architect',group:'Engineering'},
+  {name:'Ron Nagy',title:'Sr. Evangelist',group:'PMM'},
+  {name:'Lukas Ryf',title:'Senior Director Engineering',group:'Engineering'},
+  {name:'Chris Millar',title:'Lead Architect',group:'Engineering'},
+  {name:'Gillian Krause',title:'Director, AEM Engineering',group:'Engineering'},
+  {name:'Shruti Jagtap',title:'Sr. Solution Architect',group:'Engineering'},
+  {name:'Sunish Verma',title:'Director, Solution Architect',group:'Engineering'},
+  {name:'Mihai Corlan',title:'Sr. Director of Engineering',group:'Engineering'},
+  {name:'Paolo Mottadelli',title:'Director, Engineering',group:'Engineering'},
+  {name:'Adam Pazik',title:'Senior Director, Cloud Engineering',group:'Engineering'},
+  {name:'Tanju Erinmez',title:'Sr. Software Engineer',group:'Engineering'},
+  {name:'Bogdan Petre Posa',title:'Sr. Software Development Engineer',group:'Engineering'},
+  {name:'David Catalan',title:'Sr. Software Engineer',group:'Engineering'},
+  {name:'Karl Pauls',title:'Senior Computer Scientist',group:'Engineering'},
+  {name:'Clint Goodie Nice',title:'Principal Scientist',group:'Engineering'},
+  {name:'Nadine Wellman',title:'Eng. Business Ops Manager (CBC)',group:'Engineering'},
+  {name:'Mitch Nelson',title:'Sr. Director, WW Managed Services',group:'Engineering'},
+  {name:'Darin Kuntze',title:'Sr. Engineer',group:'Engineering'},
+  {name:'Markus Haack',title:'Principal Scientist',group:'Engineering'},
+  {name:'Sean Steiner',title:'Sr. Software Engineer',group:'Engineering'},
+  {name:'Amol Anand',title:'Principal Engineer',group:'Engineering'},
+];
+
+const NAME_ALIASES={
+  'Marc Angelinovic':'Marc Angelinovich',
+  'Greg  Klebus':'Greg Klebus',
+  'Anurag  Sharma':'Anurag Sharma',
+  'Cecily  Liu':'Cecily Liu',
+  'Nick  Whittenburg':'Nick Whittenburg',
+  'Conrad Wöltge':'Conrad Woltge',
+};
+
+let REGION_MAP={"AbbVie": "US/Canada", "Abercrombie & Fitch": "US/Canada", "AIG General Insurance": "US/Canada", "Amazon Web Services": "US/Canada", "American Lebanese Syrian Associated Charities": "US/Canada", "American Red Cross": "US/Canada", "AMplifon": "EMEA", "Apple": "US/Canada", "AstraZeneca": "EMEA", "ASUS": "APAC", "AT&T": "US/Canada", "Avalara": "US/Canada", "Bancolombia SA": "Latin America", "Bio-Rad Laboratories, Inc.": "US/Canada", "BlackRock": "US/Canada", "BMC Software": "US/Canada", "Bridgestone": "APAC", "Bristol-Myers Squibb (BMS)": "US/Canada", "BRP": "US/Canada", "Canadian Imperial Bank of Commerce (CIBC)": "US/Canada", "CarGurus, Inc.": "US/Canada", "CASIO": "APAC", "Caterpillar": "US/Canada", "Cathay United Bank": "APAC", "Centene": "US/Canada", "Choice Hotels": "US/Canada", "Chow Tai Fook Jewellery": "APAC", "Chubb": "US/Canada", "Cigna": "US/Canada", "Citibank": "US/Canada", "Citizens Bank": "US/Canada", "Coca-Cola": "US/Canada", "Colgate-Palmolive Company": "US/Canada", "Corning": "US/Canada", "Costa Crociere": "EMEA", "Costco": "US/Canada", "Credit One": "US/Canada", "Cvs Health": "US/Canada", "Danaher": "US/Canada", "Dayforce": "US/Canada", "Definity Financial": "US/Canada", "Deloitte": "US/Canada", "Delta Air Lines": "US/Canada", "Dick's Sporting Goods": "US/Canada", "DigiCert": "US/Canada", "DPS Holdings": "US/Canada", "Eli Lilly": "US/Canada", "Enterprise Holdings": "US/Canada", "Equitable": "US/Canada", "Ernst & Young (EY)": "US/Canada", "Federal Express (FedEx)": "US/Canada", "First Citizens BancShares": "US/Canada", "First National Bank of Omaha": "US/Canada", "Fiserv": "US/Canada", "Gen Digital": "US/Canada", "General Motors (GM)": "US/Canada", "Genmab": "US/Canada", "Grand Circle LLC": "US/Canada", "Grupo Salinas-TV Azteca, S.A.B. de C.V.": "Latin America", "GSK": "EMEA", "Herbalife": "US/Canada", "HeritageSG": "APAC", "Hewlett Packard Enterprise (HPE)": "US/Canada", "Hitachi": "APAC", "Home Depot": "US/Canada", "Honeywell": "US/Canada", "IndusInd Bank Ltd": "APAC", "Inova Health System Foundation": "US/Canada", "Interface": "US/Canada", "Japan B2B Customers,  (Macnica, Dainippon printing, Mitsubishi)": "APAC", "Japanese B2B customers": "APAC", "Jet2.com": "EMEA", "JPMorgan Chase": "US/Canada", "Kaiser Permanente": "US/Canada", "Kao Corporation, All Nippon Airways Co., Ltd.": "APAC", "Keybank National Association": "US/Canada", "Keysight Technologies": "US/Canada", "KrisShop": "APAC", "Lamb Weston": "US/Canada", "LG Electronics": "APAC", "Loblaw": "US/Canada", "Lumen": "US/Canada", "Macnica, and a few japan customers": "APAC", "Major League Baseball (MLB)": "US/Canada", "Manulife": "US/Canada", "Maruti Suzuki": "APAC", "Masco": "US/Canada", "Mayo Clinic": "US/Canada", "McKesson Medical Surgical": "US/Canada", "Microchip": "US/Canada", "Micron Technology": "US/Canada", "Microsoft": "US/Canada", "MS FINANCING LLC": "US/Canada", "MSC Cruises": "EMEA", "MSCI": "US/Canada", "National Bank of Canada": "US/Canada", "National Football League (NFL)": "US/Canada", "Nike": "US/Canada", "Northwell Health": "US/Canada", "Not Listed": "Unknown", "Nutraceutical Wellness": "US/Canada", "NVIDIA": "US/Canada", "Paychex": "US/Canada", "Pearson": "EMEA", "PGA Tour Inc": "US/Canada", "Plaza Premium Group": "APAC", "Prada": "EMEA", "prada": "EMEA", "PricewaterhouseCoopers (PwC)": "US/Canada", "PUBLICIS": "EMEA", "QVC Group": "US/Canada", "Red Hat": "US/Canada", "RGA": "US/Canada", "Robert Half": "US/Canada", "Royal Automobile Club of Victoria (RACV) Limited": "APAC", "Royal Bank of Canada (RBC)": "US/Canada", "S&P Global": "US/Canada", "SAP": "EMEA", "Serta Simmons": "US/Canada", "ServiceNow": "US/Canada", "Sherwin-Williams": "US/Canada", "Signet Jewelers": "US/Canada", "Singapore Life": "APAC", "Sitime Corporation": "US/Canada", "Southern Company": "US/Canada", "Southwest Airlines": "US/Canada", "State Farm Mutual Automobile Insurance": "US/Canada", "Stryker": "US/Canada", "Sun Life Assurance Company of Canada": "US/Canada", "Suncorp Corporate Services": "APAC", "T-Mobile": "US/Canada", "The Kroger Co": "US/Canada", "Thrivent": "US/Canada", "Toyota": "APAC", "Travel Guard": "US/Canada", "TUI Group": "EMEA", "Under Armour": "US/Canada", "Unipol": "EMEA", "University of Texas at Austin Dell Medical School": "US/Canada", "Vanguard Group": "US/Canada", "Villanova University - 269852": "US/Canada", "Virgin Atlantic": "EMEA", "Vistra Corp": "US/Canada", "Vizient": "US/Canada", "Volvo Trucks": "EMEA", "Walmart": "US/Canada", "Wellmark Inc": "US/Canada", "Wells Fargo Bank": "US/Canada", "WK Kellogg": "US/Canada", "Workday": "US/Canada", "Chubb ": "US/Canada", "Pearson ": "EMEA", "American Lebanese Syrian Associated Charities ": "US/Canada", "Sun Life Assurance Company of Canada ": "US/Canada", "Thrivent ": "US/Canada", "Conrad Woltge": "US/Canada"};
+
+const REGIONS=['US/Canada','EMEA','APAC','Latin America','Unknown'];
+
+// Per-person meeting details (for detail panel)
+let perPersonMeetings = JSON.parse(JSON.stringify(BUILTIN_PER_PERSON));
+
+let rawMeetingRows=null;
+
+// ── Built-in chart data ────────────────────────────────────────────────────
+const BUILTIN_DATA={"Aditi Dutt Chaudhuri": {"total": 8, "multi_total": 6, "by_region": {"US/Canada": {"count": 6, "multi_count": 5, "accounts": ["AT&T", "American Red Cross", "First Citizens BancShares", "Major League Baseball (MLB)", "Manulife", "Travel Guard"]}, "APAC": {"count": 2, "multi_count": 1, "accounts": ["LG Electronics", "Macnica, and a few japan customers"]}}, "multi_by_region": {"US/Canada": {"count": 5, "accounts": ["AT&T", "American Red Cross", "Major League Baseball (MLB)", "Manulife", "Travel Guard"]}, "APAC": {"count": 1, "accounts": ["LG Electronics"]}}}, "Lukas Ryf": {"total": 0, "multi_total": 0, "by_region": {}, "multi_by_region": {}}, "Gilles Knobloch": {"total": 7, "multi_total": 3, "by_region": {"EMEA": {"count": 1, "multi_count": 0, "accounts": ["AMplifon"]}, "US/Canada": {"count": 6, "multi_count": 3, "accounts": ["AbbVie", "Abercrombie & Fitch", "Amazon Web Services", "Danaher", "Dick's Sporting Goods", "Microsoft"]}}, "multi_by_region": {"US/Canada": {"count": 3, "accounts": ["Abercrombie & Fitch", "Amazon Web Services", "Microsoft"]}}}, "Nick Whittenburg": {"total": 1, "multi_total": 1, "by_region": {"US/Canada": {"count": 1, "multi_count": 1, "accounts": ["S&P Global"]}}, "multi_by_region": {"US/Canada": {"count": 1, "accounts": ["S&P Global"]}}}, "Gitesh Malik": {"total": 1, "multi_total": 0, "by_region": {"US/Canada": {"count": 1, "multi_count": 0, "accounts": ["Wellmark Inc"]}}, "multi_by_region": {}}, "Greg Klebus": {"total": 6, "multi_total": 3, "by_region": {"US/Canada": {"count": 6, "multi_count": 3, "accounts": ["AbbVie", "Amazon Web Services", "DPS Holdings", "Eli Lilly", "Interface", "Red Hat"]}}, "multi_by_region": {"US/Canada": {"count": 3, "accounts": ["Amazon Web Services", "DPS Holdings", "Eli Lilly"]}}}, "Kay Sin": {"total": 1, "multi_total": 1, "by_region": {"US/Canada": {"count": 1, "multi_count": 1, "accounts": ["Sun Life Assurance Company of Canada"]}}, "multi_by_region": {"US/Canada": {"count": 1, "accounts": ["Sun Life Assurance Company of Canada"]}}}, "Sunish Verma": {"total": 3, "multi_total": 0, "by_region": {"US/Canada": {"count": 3, "multi_count": 0, "accounts": ["Dick's Sporting Goods", "General Motors (GM)"]}}, "multi_by_region": {}}, "Bogdan Petre Posa": {"total": 0, "multi_total": 0, "by_region": {}, "multi_by_region": {}}, "Mihai Corlan": {"total": 1, "multi_total": 1, "by_region": {"US/Canada": {"count": 1, "multi_count": 1, "accounts": ["ServiceNow"]}}, "multi_by_region": {"US/Canada": {"count": 1, "accounts": ["ServiceNow"]}}}, "Pauline Huynh": {"total": 1, "multi_total": 0, "by_region": {"US/Canada": {"count": 1, "multi_count": 0, "accounts": ["Bristol-Myers Squibb (BMS)"]}}, "multi_by_region": {}}, "Martin Buergi": {"total": 7, "multi_total": 2, "by_region": {"US/Canada": {"count": 6, "multi_count": 2, "accounts": ["Abercrombie & Fitch", "Fiserv", "Interface", "Lamb Weston", "Nike", "S&P Global"]}, "EMEA": {"count": 1, "multi_count": 0, "accounts": ["Prada"]}}, "multi_by_region": {"US/Canada": {"count": 2, "accounts": ["Abercrombie & Fitch", "S&P Global"]}}}, "Vaishnav Gorur": {"total": 0, "multi_total": 0, "by_region": {}, "multi_by_region": {}}, "Paolo Mottadelli": {"total": 3, "multi_total": 2, "by_region": {"EMEA": {"count": 1, "multi_count": 1, "accounts": ["AstraZeneca"]}, "US/Canada": {"count": 2, "multi_count": 1, "accounts": ["Credit One", "Lumen"]}}, "multi_by_region": {"EMEA": {"count": 1, "accounts": ["AstraZeneca"]}, "US/Canada": {"count": 1, "accounts": ["Lumen"]}}}, "Nikunj Merchant": {"total": 13, "multi_total": 2, "by_region": {"US/Canada": {"count": 13, "multi_count": 2, "accounts": ["BMC Software", "Bio-Rad Laboratories, Inc.", "Colgate-Palmolive Company", "DigiCert", "Equitable", "JPMorgan Chase", "QVC Group", "RGA", "Robert Half", "Southern Company", "State Farm Mutual Automobile Insurance", "Vistra Corp", "Vizient"]}}, "multi_by_region": {"US/Canada": {"count": 2, "accounts": ["Colgate-Palmolive Company", "Equitable"]}}}, "Kathie Yang": {"total": 12, "multi_total": 6, "by_region": {"US/Canada": {"count": 8, "multi_count": 6, "accounts": ["Centene", "DPS Holdings", "Definity Financial", "Equitable", "Herbalife", "Interface", "Northwell Health", "ServiceNow"]}, "APAC": {"count": 1, "multi_count": 0, "accounts": ["Chow Tai Fook Jewellery"]}, "EMEA": {"count": 3, "multi_count": 0, "accounts": ["Costa Crociere", "Unipol", "prada"]}}, "multi_by_region": {"US/Canada": {"count": 6, "accounts": ["Centene", "DPS Holdings", "Definity Financial", "Equitable", "Herbalife", "ServiceNow"]}}}, "Marc Angelinovich": {"total": 13, "multi_total": 3, "by_region": {"US/Canada": {"count": 12, "multi_count": 2, "accounts": ["BRP", "Costco", "DPS Holdings", "Deloitte", "First National Bank of Omaha", "Home Depot", "Honeywell", "Loblaw", "PGA Tour Inc", "Serta Simmons", "Under Armour", "Walmart"]}, "EMEA": {"count": 1, "multi_count": 1, "accounts": ["SAP"]}}, "multi_by_region": {"US/Canada": {"count": 2, "accounts": ["DPS Holdings", "Walmart"]}, "EMEA": {"count": 1, "accounts": ["SAP"]}}}, "Brian Chaikelson": {"total": 4, "multi_total": 2, "by_region": {"US/Canada": {"count": 4, "multi_count": 2, "accounts": ["Amazon Web Services", "Bristol-Myers Squibb (BMS)", "Keybank National Association", "S&P Global"]}}, "multi_by_region": {"US/Canada": {"count": 2, "accounts": ["Amazon Web Services", "S&P Global"]}}}, "Karthik Muralidharan": {"total": 13, "multi_total": 5, "by_region": {"US/Canada": {"count": 12, "multi_count": 5, "accounts": ["Costco", "Cvs Health", "Definity Financial", "Eli Lilly", "Enterprise Holdings", "Home Depot", "Lamb Weston", "Microchip", "The Kroger Co", "WK Kellogg", "Wells Fargo Bank"]}, "Latin America": {"count": 1, "multi_count": 0, "accounts": ["Grupo Salinas-TV Azteca, S.A.B. de C.V."]}}, "multi_by_region": {"US/Canada": {"count": 5, "accounts": ["Cvs Health", "Definity Financial", "Eli Lilly", "Enterprise Holdings", "The Kroger Co"]}}}, "Tanju Erinmez": {"total": 0, "multi_total": 0, "by_region": {}, "multi_by_region": {}}, "Alexander Saar": {"total": 4, "multi_total": 3, "by_region": {"US/Canada": {"count": 2, "multi_count": 2, "accounts": ["Eli Lilly", "T-Mobile"]}, "APAC": {"count": 2, "multi_count": 1, "accounts": ["Kao Corporation, All Nippon Airways Co., Ltd.", "Toyota"]}}, "multi_by_region": {"US/Canada": {"count": 2, "accounts": ["Eli Lilly", "T-Mobile"]}, "APAC": {"count": 1, "accounts": ["Toyota"]}}}, "Markus Haack": {"total": 0, "multi_total": 0, "by_region": {}, "multi_by_region": {}}, "Amol Anand": {"total": 5, "multi_total": 4, "by_region": {"US/Canada": {"count": 5, "multi_count": 4, "accounts": ["DigiCert", "Eli Lilly", "Kaiser Permanente", "Microsoft", "Northwell Health"]}}, "multi_by_region": {"US/Canada": {"count": 4, "accounts": ["DigiCert", "Eli Lilly", "Kaiser Permanente", "Microsoft"]}}}, "Ron Nagy": {"total": 0, "multi_total": 0, "by_region": {}, "multi_by_region": {}}, "Cedric Huesler": {"total": 15, "multi_total": 5, "by_region": {"US/Canada": {"count": 11, "multi_count": 5, "accounts": ["Apple", "BlackRock", "Citizens Bank", "Ernst & Young (EY)", "General Motors (GM)", "JPMorgan Chase", "Kaiser Permanente", "Microsoft", "Sun Life Assurance Company of Canada", "T-Mobile", "Vanguard Group"]}, "EMEA": {"count": 2, "multi_count": 0, "accounts": ["GSK", "Virgin Atlantic"]}, "APAC": {"count": 2, "multi_count": 0, "accounts": ["KrisShop", "Singapore Life"]}}, "multi_by_region": {"US/Canada": {"count": 5, "accounts": ["BlackRock", "Kaiser Permanente", "Microsoft", "T-Mobile", "Vanguard Group"]}}}, "Max Iguer": {"total": 7, "multi_total": 4, "by_region": {"APAC": {"count": 4, "multi_count": 3, "accounts": ["ASUS", "Bridgestone", "Singapore Life"]}, "US/Canada": {"count": 3, "multi_count": 1, "accounts": ["Herbalife", "Royal Bank of Canada (RBC)", "Stryker"]}}, "multi_by_region": {"APAC": {"count": 3, "accounts": ["ASUS", "Bridgestone"]}, "US/Canada": {"count": 1, "accounts": ["Herbalife"]}}}, "Gabriel Walt": {"total": 2, "multi_total": 1, "by_region": {"US/Canada": {"count": 2, "multi_count": 1, "accounts": ["Amazon Web Services", "BlackRock"]}}, "multi_by_region": {"US/Canada": {"count": 1, "accounts": ["BlackRock"]}}}, "Arun Taneja": {"total": 5, "multi_total": 3, "by_region": {"Latin America": {"count": 1, "multi_count": 1, "accounts": ["Bancolombia SA"]}, "APAC": {"count": 1, "multi_count": 1, "accounts": ["Suncorp Corporate Services"]}, "US/Canada": {"count": 3, "multi_count": 1, "accounts": ["Thrivent", "University of Texas at Austin Dell Medical School"]}}, "multi_by_region": {"Latin America": {"count": 1, "accounts": ["Bancolombia SA"]}, "APAC": {"count": 1, "accounts": ["Suncorp Corporate Services"]}, "US/Canada": {"count": 1, "accounts": ["University of Texas at Austin Dell Medical School"]}}}, "Conrad Woltge": {"total": 1, "multi_total": 1, "by_region": {"EMEA": {"count": 1, "multi_count": 1, "accounts": ["SAP"]}}, "multi_by_region": {"EMEA": {"count": 1, "accounts": ["SAP"]}}}, "Corey Dulimba": {"total": 4, "multi_total": 3, "by_region": {"US/Canada": {"count": 4, "multi_count": 3, "accounts": ["Abercrombie & Fitch", "Choice Hotels", "Microsoft"]}}, "multi_by_region": {"US/Canada": {"count": 3, "accounts": ["Abercrombie & Fitch", "Microsoft"]}}}, "Nadine Wellman": {"total": 0, "multi_total": 0, "by_region": {}, "multi_by_region": {}}, "Sean Steiner": {"total": 0, "multi_total": 0, "by_region": {}, "multi_by_region": {}}, "Sreekanth Reddy": {"total": 10, "multi_total": 1, "by_region": {"US/Canada": {"count": 9, "multi_count": 0, "accounts": ["Avalara", "CarGurus, Inc.", "Inova Health System Foundation", "McKesson Medical Surgical", "Micron Technology", "NVIDIA", "PricewaterhouseCoopers (PwC)", "S&P Global", "Workday"]}, "APAC": {"count": 1, "multi_count": 1, "accounts": ["Hitachi"]}}, "multi_by_region": {"APAC": {"count": 1, "accounts": ["Hitachi"]}}}, "David Catalan": {"total": 0, "multi_total": 0, "by_region": {}, "multi_by_region": {}}, "Loni Stark": {"total": 20, "multi_total": 3, "by_region": {"US/Canada": {"count": 13, "multi_count": 2, "accounts": ["AT&T", "American Lebanese Syrian Associated Charities", "Canadian Imperial Bank of Commerce (CIBC)", "Coca-Cola", "Eli Lilly", "Mayo Clinic", "National Football League (NFL)", "Sherwin-Williams", "Sitime Corporation", "Southwest Airlines", "Sun Life Assurance Company of Canada", "T-Mobile", "Walmart"]}, "EMEA": {"count": 4, "multi_count": 1, "accounts": ["AstraZeneca", "MSC Cruises", "Pearson", "Volvo Trucks"]}, "APAC": {"count": 3, "multi_count": 0, "accounts": ["CASIO", "HeritageSG", "Toyota"]}}, "multi_by_region": {"US/Canada": {"count": 2, "accounts": ["Sun Life Assurance Company of Canada", "Walmart"]}, "EMEA": {"count": 1, "accounts": ["AstraZeneca"]}}}, "Hyman Chung": {"total": 4, "multi_total": 3, "by_region": {"US/Canada": {"count": 4, "multi_count": 3, "accounts": ["American Red Cross", "Centene", "Gen Digital", "The Kroger Co"]}}, "multi_by_region": {"US/Canada": {"count": 3, "accounts": ["American Red Cross", "Centene", "The Kroger Co"]}}}, "Gillian Krause": {"total": 5, "multi_total": 4, "by_region": {"US/Canada": {"count": 4, "multi_count": 4, "accounts": ["DigiCert", "Kaiser Permanente", "Microsoft"]}, "APAC": {"count": 1, "multi_count": 0, "accounts": ["Suncorp Corporate Services"]}}, "multi_by_region": {"US/Canada": {"count": 4, "accounts": ["DigiCert", "Kaiser Permanente", "Microsoft"]}}}, "Cecily Liu": {"total": 4, "multi_total": 4, "by_region": {"APAC": {"count": 3, "multi_count": 3, "accounts": ["ASUS", "Bridgestone"]}, "US/Canada": {"count": 1, "multi_count": 1, "accounts": ["Vanguard Group"]}}, "multi_by_region": {"APAC": {"count": 3, "accounts": ["ASUS", "Bridgestone"]}, "US/Canada": {"count": 1, "accounts": ["Vanguard Group"]}}}, "Tatyana Kozachek": {"total": 0, "multi_total": 0, "by_region": {}, "multi_by_region": {}}, "Dirk Rudolph": {"total": 0, "multi_total": 0, "by_region": {}, "multi_by_region": {}}, "Melissa Reano": {"total": 5, "multi_total": 3, "by_region": {"Latin America": {"count": 1, "multi_count": 1, "accounts": ["Bancolombia SA"]}, "US/Canada": {"count": 3, "multi_count": 1, "accounts": ["Keysight Technologies", "National Football League (NFL)", "University of Texas at Austin Dell Medical School"]}, "APAC": {"count": 1, "multi_count": 1, "accounts": ["Suncorp Corporate Services"]}}, "multi_by_region": {"Latin America": {"count": 1, "accounts": ["Bancolombia SA"]}, "US/Canada": {"count": 1, "accounts": ["University of Texas at Austin Dell Medical School"]}, "APAC": {"count": 1, "accounts": ["Suncorp Corporate Services"]}}}, "Felix Delval": {"total": 1, "multi_total": 0, "by_region": {"US/Canada": {"count": 1, "multi_count": 0, "accounts": ["Nutraceutical Wellness"]}}, "multi_by_region": {}}, "Akhil Aggarwal": {"total": 2, "multi_total": 1, "by_region": {"APAC": {"count": 2, "multi_count": 1, "accounts": ["Hitachi", "Maruti Suzuki"]}}, "multi_by_region": {"APAC": {"count": 1, "accounts": ["Hitachi"]}}}, "Olena Kochis": {"total": 1, "multi_total": 0, "by_region": {"EMEA": {"count": 1, "multi_count": 0, "accounts": ["SAP"]}}, "multi_by_region": {}}, "Michael Marth": {"total": 3, "multi_total": 2, "by_region": {"EMEA": {"count": 1, "multi_count": 1, "accounts": ["AstraZeneca"]}, "US/Canada": {"count": 2, "multi_count": 1, "accounts": ["Eli Lilly", "Signet Jewelers"]}}, "multi_by_region": {"EMEA": {"count": 1, "accounts": ["AstraZeneca"]}, "US/Canada": {"count": 1, "accounts": ["Eli Lilly"]}}}, "Adam Pazik": {"total": 6, "multi_total": 3, "by_region": {"US/Canada": {"count": 5, "multi_count": 2, "accounts": ["Citibank", "MS FINANCING LLC", "National Bank of Canada", "T-Mobile", "Villanova University - 269852"]}, "APAC": {"count": 1, "multi_count": 1, "accounts": ["Toyota"]}}, "multi_by_region": {"US/Canada": {"count": 2, "accounts": ["MS FINANCING LLC", "T-Mobile"]}, "APAC": {"count": 1, "accounts": ["Toyota"]}}}, "Darin Kuntze": {"total": 2, "multi_total": 0, "by_region": {"US/Canada": {"count": 1, "multi_count": 0, "accounts": ["Hewlett Packard Enterprise (HPE)"]}, "EMEA": {"count": 1, "multi_count": 0, "accounts": ["Volvo Trucks"]}}, "multi_by_region": {}}, "David Folk": {"total": 2, "multi_total": 2, "by_region": {"US/Canada": {"count": 2, "multi_count": 2, "accounts": ["Cvs Health", "Enterprise Holdings"]}}, "multi_by_region": {"US/Canada": {"count": 2, "accounts": ["Cvs Health", "Enterprise Holdings"]}}}, "Mayank Gaur": {"total": 2, "multi_total": 0, "by_region": {"US/Canada": {"count": 2, "multi_count": 0, "accounts": ["Eli Lilly", "Red Hat"]}}, "multi_by_region": {}}, "John Tapley": {"total": 0, "multi_total": 0, "by_region": {}, "multi_by_region": {}}, "Anurag Sharma": {"total": 3, "multi_total": 3, "by_region": {"APAC": {"count": 2, "multi_count": 2, "accounts": ["Hitachi", "Suncorp Corporate Services"]}, "US/Canada": {"count": 1, "multi_count": 1, "accounts": ["University of Texas at Austin Dell Medical School"]}}, "multi_by_region": {"APAC": {"count": 2, "accounts": ["Hitachi", "Suncorp Corporate Services"]}, "US/Canada": {"count": 1, "accounts": ["University of Texas at Austin Dell Medical School"]}}}, "Chris Millar": {"total": 4, "multi_total": 2, "by_region": {"US/Canada": {"count": 3, "multi_count": 2, "accounts": ["Colgate-Palmolive Company", "Genmab", "Lumen"]}, "EMEA": {"count": 1, "multi_count": 0, "accounts": ["Jet2.com"]}}, "multi_by_region": {"US/Canada": {"count": 2, "accounts": ["Colgate-Palmolive Company", "Lumen"]}}}, "Shruti Jagtap": {"total": 0, "multi_total": 0, "by_region": {}, "multi_by_region": {}}, "Jamie Brighton": {"total": 2, "multi_total": 1, "by_region": {"US/Canada": {"count": 1, "multi_count": 0, "accounts": ["Amazon Web Services"]}, "EMEA": {"count": 1, "multi_count": 1, "accounts": ["TUI Group"]}}, "multi_by_region": {"EMEA": {"count": 1, "accounts": ["TUI Group"]}}}, "Mark Szulc": {"total": 4, "multi_total": 0, "by_region": {"APAC": {"count": 4, "multi_count": 0, "accounts": ["Cathay United Bank", "Japan B2B Customers,  (Macnica, Dainippon printing, Mitsubishi)", "Plaza Premium Group", "Royal Automobile Club of Victoria (RACV) Limited"]}}, "multi_by_region": {}}, "Shankari Panchapakesan": {"total": 4, "multi_total": 3, "by_region": {"US/Canada": {"count": 3, "multi_count": 2, "accounts": ["Dayforce", "Microsoft", "T-Mobile"]}, "EMEA": {"count": 1, "multi_count": 1, "accounts": ["SAP"]}}, "multi_by_region": {"US/Canada": {"count": 2, "accounts": ["Microsoft", "T-Mobile"]}, "EMEA": {"count": 1, "accounts": ["SAP"]}}}, "Mitch Nelson": {"total": 3, "multi_total": 2, "by_region": {"US/Canada": {"count": 3, "multi_count": 2, "accounts": ["Amazon Web Services", "Microsoft"]}}, "multi_by_region": {"US/Canada": {"count": 2, "accounts": ["Amazon Web Services", "Microsoft"]}}}, "Tina Ngo": {"total": 1, "multi_total": 0, "by_region": {"US/Canada": {"count": 1, "multi_count": 0, "accounts": ["Masco"]}}, "multi_by_region": {}}, "Meryll Blanchet": {"total": 7, "multi_total": 6, "by_region": {"US/Canada": {"count": 6, "multi_count": 5, "accounts": ["AT&T", "DPS Holdings", "Major League Baseball (MLB)", "Manulife", "PricewaterhouseCoopers (PwC)", "Travel Guard"]}, "APAC": {"count": 1, "multi_count": 1, "accounts": ["LG Electronics"]}}, "multi_by_region": {"US/Canada": {"count": 5, "accounts": ["AT&T", "DPS Holdings", "Major League Baseball (MLB)", "Manulife", "Travel Guard"]}, "APAC": {"count": 1, "accounts": ["LG Electronics"]}}}, "Karl Pauls": {"total": 0, "multi_total": 0, "by_region": {}, "multi_by_region": {}}, "Clint Goodie Nice": {"total": 0, "multi_total": 0, "by_region": {}, "multi_by_region": {}}, "Haresh Kumar": {"total": 16, "multi_total": 3, "by_region": {"US/Canada": {"count": 11, "multi_count": 2, "accounts": ["AIG General Insurance", "Chubb", "Cigna", "Delta Air Lines", "Federal Express (FedEx)", "Kaiser Permanente", "MS FINANCING LLC", "Mayo Clinic", "Paychex", "PricewaterhouseCoopers (PwC)"]}, "APAC": {"count": 2, "multi_count": 0, "accounts": ["IndusInd Bank Ltd", "Japanese B2B customers"]}, "EMEA": {"count": 3, "multi_count": 1, "accounts": ["PUBLICIS", "TUI Group", "Unipol"]}}, "multi_by_region": {"US/Canada": {"count": 2, "accounts": ["Kaiser Permanente", "MS FINANCING LLC"]}, "EMEA": {"count": 1, "accounts": ["TUI Group"]}}}, "Shelly Chiang": {"total": 5, "multi_total": 1, "by_region": {"US/Canada": {"count": 5, "multi_count": 1, "accounts": ["Caterpillar", "Corning", "Grand Circle LLC", "MSCI", "Microsoft"]}}, "multi_by_region": {"US/Canada": {"count": 1, "accounts": ["Microsoft"]}}}};
+
+function buildDisplayData(meetingMap){
+  return ATTENDEES.map(a=>{
+    const m=meetingMap[a.name]||{total:0,multi_total:0,by_region:{},multi_by_region:{}};
+    return{name:a.name,title:a.title,group:a.group,total:m.total,multi_total:m.multi_total,by_region:m.by_region,multi_by_region:m.multi_by_region};
+  });
+}
+
+function processRows(rows){
+  const attendeeSet=new Set(ATTENDEES.map(a=>a.name));
+  function normName(raw){
+    if(!raw)return'';
+    let n=String(raw).split(' - ')[0];
+    // Replace non-breaking spaces and other unicode whitespace with regular space
+    n=n.replace(/[\u00a0\u2000-\u200b\u202f\u205f\u3000]/g,' ');
+    // Collapse multiple spaces and trim
+    n=n.replace(/ +/g,' ').trim();
+    // Apply explicit aliases first
+    n=NAME_ALIASES[n]||n;
+    // Strip diacritics: decompose (NFD) then remove combining marks
+    n=n.normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    return n;
+  }
+  const codeSummitAttendees={};
+  rows.forEach(row=>{
+    const name=normName(row['NAME-ROLE-COMPANY']);
+    if(!attendeeSet.has(name))return;
+    const code=row['CODE'];if(!code)return;
+    if(!codeSummitAttendees[code])codeSummitAttendees[code]=new Set();
+    codeSummitAttendees[code].add(name);
+  });
+  const multiCodes=new Set(Object.entries(codeSummitAttendees).filter(([,s])=>s.size>1).map(([c])=>c));
+
+  // Build per-person meeting detail for click panel
+  const meetingsByCode={};
+  rows.forEach(row=>{
+    const code=String(row['CODE']||'');if(!code)return;
+    if(!meetingsByCode[code])meetingsByCode[code]={code,title:String(row['TITLE']||'').trim(),account:String(row['AS26 ACCOUNT NAME']||'').trim(),all_attendees:new Set(),summit_attendees:new Set()};
+    const name=normName(row['NAME-ROLE-COMPANY']);
+    meetingsByCode[code].all_attendees.add(name);
+    if(attendeeSet.has(name))meetingsByCode[code].summit_attendees.add(name);
+  });
+  // Add region
+  Object.values(meetingsByCode).forEach(m=>{
+    m.region=REGION_MAP[m.account]||'Unknown';
+    m.all_attendees=[...m.all_attendees].sort();
+    m.summit_attendees=[...m.summit_attendees].sort();
+  });
+  // Build per-person
+  const newPerPerson={};
+  ATTENDEES.forEach(a=>{newPerPerson[a.name]=[];});
+  rows.forEach(row=>{
+    const name=normName(row['NAME-ROLE-COMPANY']);
+    if(!attendeeSet.has(name))return;
+    const code=String(row['CODE']||'');
+    if(meetingsByCode[code]&&!newPerPerson[name].some(m=>m.code===code)){
+      newPerPerson[name].push({...meetingsByCode[code],all_attendees:[...meetingsByCode[code].all_attendees],summit_attendees:[...meetingsByCode[code].summit_attendees]});
+    }
+  });
+  Object.keys(newPerPerson).forEach(name=>{newPerPerson[name].sort((a,b)=>a.account.localeCompare(b.account));});
+  perPersonMeetings=newPerPerson;
+
+  const agg={};
+  rows.forEach(row=>{
+    const name=normName(row['NAME-ROLE-COMPANY']);if(!attendeeSet.has(name))return;
+    const code=row['CODE'],acct=String(row['AS26 ACCOUNT NAME']||'').trim();
+    const region=REGION_MAP[acct]||'Unknown';if(region==='Unknown')return;
+    const isMulti=multiCodes.has(code);
+    if(!agg[name])agg[name]={codes:new Set(),multi_codes:new Set(),byRegion:{}};
+    if(code){agg[name].codes.add(code);if(isMulti)agg[name].multi_codes.add(code);}
+    if(region){
+      if(!agg[name].byRegion[region])agg[name].byRegion[region]={codes:new Set(),multiCodes:new Set(),accounts:new Set(),multiAccounts:new Set()};
+      if(code){agg[name].byRegion[region].codes.add(code);if(isMulti)agg[name].byRegion[region].multiCodes.add(code);}
+      if(acct){agg[name].byRegion[region].accounts.add(acct);if(isMulti)agg[name].byRegion[region].multiAccounts.add(acct);}
+    }
+  });
+  const meetingMap={};
+  Object.entries(agg).forEach(([name,d])=>{
+    const by_region={},multi_by_region={};
+    Object.entries(d.byRegion).forEach(([r,rd])=>{
+      by_region[r]={count:rd.codes.size,multi_count:rd.multiCodes.size,accounts:[...rd.accounts].sort()};
+      if(rd.multiCodes.size>0)multi_by_region[r]={count:rd.multiCodes.size,accounts:[...rd.multiAccounts].sort()};
+    });
+    meetingMap[name]={total:d.codes.size,multi_total:d.multi_codes.size,by_region,multi_by_region};
+  });
+  return buildDisplayData(meetingMap);
+}
+
+function findBestSheet(wb){
+  const today=new Date();
+  const dated=wb.SheetNames.map(name=>{
+    const m=name.match(/(\d{1,2})_(\d{1,2})/);  // find M_D anywhere in the name
+    if(!m)return null;
+    const month=parseInt(m[1],10),day=parseInt(m[2],10);
+    if(month<1||month>12||day<1||day>31)return null;
+    const d=new Date(today.getFullYear(),month-1,day);
+    if(d>today)d.setFullYear(today.getFullYear()-1);
+    return{name,date:d,diff:Math.abs(today-d)};
+  }).filter(Boolean);
+  if(!dated.length)return null;
+  dated.sort((a,b)=>a.diff-b.diff);
+  return dated[0].name;
+}
+
+function handleFileSelect(e){const f=e.target.files[0];if(f)loadFile(f);e.target.value='';}
+function handleDragOver(e){e.preventDefault();document.getElementById('uploadArea').classList.add('drag-over');}
+function handleDragLeave(e){document.getElementById('uploadArea').classList.remove('drag-over');}
+function handleDrop(e){e.preventDefault();document.getElementById('uploadArea').classList.remove('drag-over');if(e.dataTransfer.files[0])loadFile(e.dataTransfer.files[0]);}
+
+function loadFile(file){
+  const badge=document.getElementById('uploadBadge'),bar=document.getElementById('processingBar'),msg=document.getElementById('processingMsg');
+  badge.className='upload-badge visible';badge.textContent='Reading…';
+  bar.classList.add('visible');msg.textContent=`Reading ${file.name}…`;
+  const reader=new FileReader();
+  reader.onload=(e)=>{
+    try{
+      msg.textContent='Parsing spreadsheet…';
+      const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+      const bestSheet=findBestSheet(wb);
+      let sheetName,sheet;
+      if(bestSheet){sheetName=bestSheet;sheet=wb.Sheets[bestSheet];msg.textContent=`Using sheet "${bestSheet}"…`;}
+      else{for(const sn of wb.SheetNames){const h=(XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,range:0})[0]||[]);if(h.includes('NAME-ROLE-COMPANY')){sheetName=sn;sheet=wb.Sheets[sn];break;}}}
+      if(!sheet)throw new Error('Could not find a valid sheet. Expected a sheet named like "4_14" or one with a "NAME-ROLE-COMPANY" column.');
+      const header=(XLSX.utils.sheet_to_json(sheet,{header:1,range:0})[0]||[]);
+      if(!header.includes('NAME-ROLE-COMPANY'))throw new Error(`Sheet "${sheetName}" doesn't contain a NAME-ROLE-COMPANY column.`);
+      rawMeetingRows=XLSX.utils.sheet_to_json(sheet);
+      msg.textContent=`Processing ${rawMeetingRows.length} rows…`;
+      setTimeout(()=>{
+        try{
+          currentData=processRows(rawMeetingRows);
+          rebuildRegionButtons();resetFilters();buildChart();clearDetail();
+          bar.classList.remove('visible');
+          badge.className='upload-badge visible';badge.textContent=`✓ ${sheetName}`;
+          document.getElementById('dataSourceText').textContent=`Showing data from: ${file.name} (sheet: ${sheetName}) — uploaded ${new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}`;
+          // Parse the sheet name date (M_D format) for the banner
+          const sheetMatch = sheetName.match(/^(\d{1,2})_(\d{1,2})$/);
+          if(sheetMatch){
+            const d = new Date(new Date().getFullYear(), parseInt(sheetMatch[1],10)-1, parseInt(sheetMatch[2],10));
+            document.getElementById('dataBannerDate').textContent = d.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+          } else {
+            document.getElementById('dataBannerDate').textContent = new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+          }
+          document.getElementById('dataBannerFile').textContent = `${file.name} · sheet ${sheetName}`;
+        }catch(err){showError(err.message);}
+      },60);
+    }catch(err){showError('Could not read file: '+err.message);}
+  };
+  reader.onerror=()=>showError('Failed to read the file.');
+  reader.readAsArrayBuffer(file);
+}
+
+function showError(msg){
+  document.getElementById('processingBar').classList.remove('visible');
+  const badge=document.getElementById('uploadBadge');
+  badge.className='upload-badge visible error';badge.textContent='⚠ '+msg;
+}
+
+// ── Mapping modal ─────────────────────────────────────────────────────────
+function renderMappingTable(filter=''){
+  const tbody=document.getElementById('mappingBody');
+  const accounts=Object.keys(REGION_MAP).sort();
+  const q=filter.toLowerCase();
+  tbody.innerHTML=accounts.filter(a=>!q||a.toLowerCase().includes(q)).map(account=>{
+    const region=REGION_MAP[account];
+    const opts=REGIONS.map(r=>`<option value="${r}"${r===region?' selected':''}>${r}</option>`).join('');
+    return`<tr><td>${account}</td><td><select class="region-select" data-account="${account.replace(/"/g,'&quot;')}" onchange="markChanged(this)">${opts}</select></td></tr>`;
+  }).join('');
+}
+function filterMappingTable(){renderMappingTable(document.getElementById('mappingSearch').value);}
+function markChanged(sel){document.getElementById('changedIndicator').classList.add('visible');}
+function openMapping(){
+  document.getElementById('mappingSearch').value='';
+  document.getElementById('changedIndicator').classList.remove('visible');
+  renderMappingTable();
+  document.getElementById('modalBackdrop').classList.add('open');
+  document.body.style.overflow='hidden';
+}
+function closeMapping(){document.getElementById('modalBackdrop').classList.remove('open');document.body.style.overflow='';}
+function handleBackdropClick(e){if(e.target===document.getElementById('modalBackdrop'))closeMapping();}
+
+function applyMappingUpdate(){
+  document.querySelectorAll('.region-select').forEach(sel=>{REGION_MAP[sel.dataset.account]=sel.value;});
+  if(rawMeetingRows){
+    currentData=processRows(rawMeetingRows);
+  } else {
+    // Reprocess the built-in per-person meeting details using updated REGION_MAP
+    currentData=reprocessBuiltin();
+  }
+  resetFilters();rebuildRegionButtons();buildChart();clearDetail();
+  document.getElementById('changedIndicator').classList.remove('visible');
+  closeMapping();
+}
+
+// Recompute chart data AND perPersonMeetings from BUILTIN_PER_PERSON using the current REGION_MAP
+function reprocessBuiltin(){
+  const attendeeSet=new Set(ATTENDEES.map(a=>a.name));
+
+  // Find multi-attendee codes across all meetings
+  const codeSummitCounts={};
+  ATTENDEES.forEach(a=>{
+    (BUILTIN_PER_PERSON[a.name]||[]).forEach(m=>{
+      if(!codeSummitCounts[m.code])codeSummitCounts[m.code]=new Set();
+      codeSummitCounts[m.code].add(a.name);
+    });
+  });
+  const multiCodes=new Set(Object.entries(codeSummitCounts).filter(([,s])=>s.size>1).map(([c])=>c));
+
+  const meetingMap={};
+  // Also rebuild perPersonMeetings with fresh regions
+  const newPerPerson={};
+
+  ATTENDEES.forEach(a=>{
+    const meetings=BUILTIN_PER_PERSON[a.name]||[];
+    const agg={};
+    const allCodes=new Set(), allMulti=new Set();
+
+    // Re-derive region for each meeting from current REGION_MAP
+    const updatedMeetings=meetings.map(m=>({
+      ...m,
+      region: REGION_MAP[m.account]||'Unknown'
+    }));
+    newPerPerson[a.name]=updatedMeetings;
+
+    updatedMeetings.forEach(m=>{
+      if(m.region==='Unknown')return;
+      const isMulti=multiCodes.has(m.code);
+      if(!agg[m.region])agg[m.region]={codes:new Set(),multiCodes:new Set(),accounts:new Set(),multiAccounts:new Set()};
+      agg[m.region].codes.add(m.code); allCodes.add(m.code);
+      if(isMulti){agg[m.region].multiCodes.add(m.code);allMulti.add(m.code);}
+      agg[m.region].accounts.add(m.account);
+      if(isMulti)agg[m.region].multiAccounts.add(m.account);
+    });
+
+    const by_region={}, multi_by_region={};
+    Object.entries(agg).forEach(([r,d])=>{
+      by_region[r]={count:d.codes.size,multi_count:d.multiCodes.size,accounts:[...d.accounts].sort()};
+      if(d.multiCodes.size>0)multi_by_region[r]={count:d.multiCodes.size,accounts:[...d.multiAccounts].sort()};
+    });
+    meetingMap[a.name]={total:allCodes.size,multi_total:allMulti.size,by_region,multi_by_region};
+  });
+
+  // Update the detail panel data so region-filtered clicks show correct meetings
+  perPersonMeetings=newPerPerson;
+
+  return buildDisplayData(meetingMap);
+}
+
+function rebuildRegionButtons(){
+  const regions=new Set();
+  currentData.forEach(d=>Object.keys(d.by_region).forEach(r=>regions.add(r)));
+  const order=['US/Canada','EMEA','APAC','Latin America'];
+  const present=order.filter(r=>regions.has(r));
+  [...regions].filter(r=>!order.includes(r)&&r!=='Unknown').forEach(r=>present.push(r));
+  const container=document.getElementById('regionBtns');
+  container.innerHTML=`<button class="filter-btn active" data-cust="all" onclick="setCust('all',this)">All</button>`;
+  present.forEach(r=>{
+    const btn=document.createElement('button');
+    btn.className='filter-btn';btn.setAttribute('data-cust',r);
+    btn.onclick=function(){setCust(r,this);};btn.textContent=r;container.appendChild(btn);
+  });
+}
+function resetFilters(){
+  activeGroup='all';activeCust='all';activeMulti='all';activeStatus='all';
+  document.querySelectorAll('[data-group]').forEach(b=>b.classList.remove('active','pm','pmm','eng'));
+  document.querySelector('[data-group="all"]').classList.add('active');
+  document.querySelectorAll('[data-multi]').forEach(b=>b.classList.remove('active','multi'));
+  document.querySelector('[data-multi="all"]').classList.add('active');
+  ['all','has','none','max'].forEach(s=>document.getElementById('kpi-card-'+s).classList.remove('active','active-has','active-none','active-max'));
+}
+
+// ── Detail panel ──────────────────────────────────────────────────────────
+function stripDiacritics(s){
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[\u00a0\u2000-\u200b\u202f\u205f\u3000]/g,' ').replace(/ +/g,' ').trim();
+}
+const SUMMIT_NAMES=new Set(ATTENDEES.map(a=>stripDiacritics(a.name)));
+
+function pillClass(region){
+  return{'US/Canada':'pill-us','EMEA':'pill-emea','APAC':'pill-apac','Latin America':'pill-latam'}[region]||'pill-unknown';
+}
+
+function showDetail(name,title,group){
+  const meetings=perPersonMeetings[name]||[];
+
+  // Filter meetings by active region filter
+  let filtered=meetings;
+  if(activeCust!=='all')filtered=meetings.filter(m=>m.region===activeCust);
+  if(activeMulti==='multi')filtered=filtered.filter(m=>m.summit_attendees&&m.summit_attendees.length>1);
+
+  document.getElementById('detailEmpty').style.display='none';
+  document.getElementById('detailContent').style.display='block';
+  document.getElementById('detailName').textContent=name;
+  document.getElementById('detailMeta').textContent=`${title} · ${group} · ${filtered.length} meeting${filtered.length!==1?'s':''}`;
+
+  const scroll=document.getElementById('detailScroll');
+  if(!filtered.length){
+    scroll.innerHTML=`<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:13px">No meetings match the current filters</div>`;
+    return;
+  }
+
+  scroll.innerHTML=filtered.map(m=>{
+    const chips=m.all_attendees.map(att=>{
+      const isSummit=SUMMIT_NAMES.has(stripDiacritics(att));
+      return`<span class="chip${isSummit?' summit':''}">${att}</span>`;
+    }).join('');
+    return`<div class="meeting-card">
+      <div class="meeting-account">
+        ${m.account||'(no account)'}
+        <span class="region-pill ${pillClass(m.region)}">${m.region}</span>
+      </div>
+      <div class="meeting-title">${m.title||'(no title)'}</div>
+      <div class="attendees-label">Attendees</div>
+      <div class="attendee-chips">${chips}</div>
+    </div>`;
+  }).join('');
+}
+
+function clearDetail(){
+  document.getElementById('detailEmpty').style.display='block';
+  document.getElementById('detailContent').style.display='none';
+}
+
+// ── Chart ─────────────────────────────────────────────────────────────────
+const GROUP_COLORS={PM:'#2b5ea7',PMM:'#1a7a56',Engineering:'#8b3a6b'};
+const ZERO_COLOR='#c8c5ba';
+let currentData=buildDisplayData(BUILTIN_DATA);
+let activeGroup='all',activeCust='all',activeMulti='all',activeStatus='all',chartInstance=null;
+let sortedForChart=[];
+
+function getView(d){
+  const useMulti=activeMulti==='multi';
+  if(activeCust==='all'){
+    if(useMulti){const count=d.multi_total;if(!count)return null;const accounts=[...new Set(Object.values(d.multi_by_region).flatMap(r=>r.accounts))].sort();return{count,accounts};}
+    if(d.total===0)return{count:0,accounts:[]};
+    const accounts=[...new Set(Object.values(d.by_region).flatMap(r=>r.accounts))].sort();
+    return{count:d.total,accounts};
+  }
+  if(useMulti){const r=d.multi_by_region[activeCust];if(!r||!r.count)return null;return{count:r.count,accounts:r.accounts};}
+  const r=d.by_region[activeCust];if(!r)return null;
+  return{count:r.count,accounts:r.accounts};
+}
+
+function getFiltered(){
+  return currentData.filter(d=>{
+    if(activeGroup!=='all'&&d.group!==activeGroup)return false;
+    if(activeMulti==='multi')return getView(d)!==null;
+    const v=getView(d);
+    const cnt=v?v.count:0;
+    if(activeStatus==='has') return cnt>0;
+    if(activeStatus==='none') return cnt===0;
+    if(activeStatus==='max'){
+      // compute max across all filtered (by other filters) — handled in buildChart
+      return true;
+    }
+    // 'all' — still hide zero-meeting people if a region or multi filter is active
+    if(activeCust!=='all'||activeMulti==='multi') return v!==null;
+    return true;
+  });
+}
+
+function buildChart(){
+  let data=getFiltered();
+
+  // For 'max' status: find the highest count, keep only people who match it
+  if(activeStatus==='max'){
+    const maxCount=Math.max(0,...data.map(d=>{const v=getView(d);return v?v.count:0;}));
+    if(maxCount>0) data=data.filter(d=>{const v=getView(d);return v&&v.count===maxCount;});
+  }
+
+  sortedForChart=[...data].sort((a,b)=>{
+    const av=getView(a),bv=getView(b);
+    return(bv?bv.count:0)-(av?av.count:0)||a.name.localeCompare(b.name);
+  });
+  const counts=sortedForChart.map(d=>{const v=getView(d);return v?v.count:0;});
+  const allFiltered=getFiltered(); // full filtered set for KPI counts
+  const withMtg=allFiltered.filter(d=>{const v=getView(d);return v&&v.count>0;}).length;
+  const noMtg=allFiltered.filter(d=>{const v=getView(d);return !v||v.count===0;}).length;
+  const maxVal=allFiltered.length?Math.max(0,...allFiltered.map(d=>{const v=getView(d);return v?v.count:0;})):0;
+
+  document.getElementById('kpi-total').textContent=allFiltered.length;
+  document.getElementById('kpi-has').textContent=withMtg;
+  document.getElementById('kpi-none').textContent=noMtg;
+  document.getElementById('kpi-max').textContent=maxVal;
+
+  // Update KPI card active states
+  ['all','has','none','max'].forEach(s=>{
+    const card=document.getElementById('kpi-card-'+s);
+    card.classList.remove('active','active-has','active-none','active-max');
+  });
+  if(activeStatus!=='all'){
+    const card=document.getElementById('kpi-card-'+activeStatus);
+    card.classList.add('active','active-'+activeStatus);
+  }
+
+  const parts=[];
+  if(activeGroup!=='all')parts.push(activeGroup);
+  if(activeCust!=='all')parts.push(activeCust+' customers');
+  if(activeMulti==='multi')parts.push('2+ attendees');
+  if(activeStatus==='has')parts.push('with meetings');
+  if(activeStatus==='none')parts.push('no meetings');
+  if(activeStatus==='max')parts.push('most meetings');
+  document.getElementById('chartLabel').textContent=(parts.length?parts.join(' · '):`All ${sortedForChart.length} attendees`)+' — sorted by meeting count';
+
+  const h=Math.max(240,sortedForChart.length*34+60);
+  document.getElementById('chartWrap').style.height=h+'px';
+
+  if(chartInstance)chartInstance.destroy();
+  chartInstance=new Chart(document.getElementById('myChart'),{
+    type:'bar',
+    data:{
+      labels:sortedForChart.map(d=>d.name),
+      datasets:[{data:counts,backgroundColor:sortedForChart.map((d,i)=>counts[i]===0?ZERO_COLOR:GROUP_COLORS[d.group]),borderWidth:0,borderRadius:4,borderSkipped:false}]
+    },
+    options:{
+      indexAxis:'y',responsive:true,maintainAspectRatio:false,
+      onClick:(event,elements)=>{
+        if(elements.length>0){
+          const idx=elements[0].index;
+          const d=sortedForChart[idx];
+          showDetail(d.name,d.title,d.group);
+          // Highlight clicked bar
+          document.getElementById('chartHint').textContent=`Showing meetings for ${d.name}`;
+        }
+      },
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          backgroundColor:'#1a1916',
+          titleFont:{family:"'DM Sans',sans-serif",size:13,weight:'600'},
+          bodyFont:{family:"'DM Mono',monospace",size:11},
+          padding:12,cornerRadius:8,displayColors:false,
+          callbacks:{
+            title:(items)=>sortedForChart[items[0].dataIndex].name,
+            label:(item)=>{
+              const d=sortedForChart[item.dataIndex],v=getView(d),cnt=v?v.count:0;
+              return[`${cnt} meeting${cnt!==1?'s':''} · ${d.group} · click to expand`,d.title];
+            }
+          }
+        }
+      },
+      scales:{
+        x:{beginAtZero:true,ticks:{stepSize:1,font:{family:"'DM Mono',monospace",size:11},color:'#9e9b94'},grid:{color:'rgba(0,0,0,0.05)'},border:{display:false},title:{display:true,text:'Number of meetings',font:{family:"'DM Sans',sans-serif",size:11},color:'#9e9b94',padding:{top:8}}},
+        y:{ticks:{font:{family:"'DM Sans',sans-serif",size:12},color:'#1a1916',autoSkip:false},grid:{display:false},border:{display:false}}
+      }
+    }
+  });
+}
+
+function setStatus(val){
+  // clicking the active card again resets to 'all'
+  activeStatus = (activeStatus===val && val!=='all') ? 'all' : val;
+  buildChart();clearDetail();
+}
+
+function setGroup(val,btn){
+  activeGroup=val;
+  document.querySelectorAll('[data-group]').forEach(b=>b.classList.remove('active','pm','pmm','eng'));
+  btn.classList.add('active');
+  if(val==='PM')btn.classList.add('pm');if(val==='PMM')btn.classList.add('pmm');if(val==='Engineering')btn.classList.add('eng');
+  buildChart();clearDetail();
+}
+function setCust(val,btn){
+  activeCust=val;
+  document.querySelectorAll('[data-cust]').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  buildChart();clearDetail();
+}
+function setMulti(val,btn){
+  activeMulti=val;
+  document.querySelectorAll('[data-multi]').forEach(b=>b.classList.remove('active','multi'));
+  btn.classList.add('active');
+  if(val==='multi')btn.classList.add('multi');
+  buildChart();clearDetail();
+}
+
+buildChart();
+</script>
+</body>
+</html>
