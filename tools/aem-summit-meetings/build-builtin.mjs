@@ -304,7 +304,7 @@ function main() {
   const baseFile = path.basename(xlsxPath);
   const bannerDate = flags.bannerDate || '14 Apr 2026';
   const bannerFile = flags.bannerFile || `${baseFile} · sheet ${sheetName}`;
-  const sourceLine = `Showing built-in data (${baseFile}, sheet ${sheetName}) — upload a new file above to refresh`;
+  const sourceLine = `Built-in = 4/14/2026 export — file "${baseFile}", tab "${sheetName}". Upload above to override with a newer spreadsheet.`;
 
   console.error(`Sheet: ${sheetName} (${rows.length} rows)`);
   console.error(`Sizes: BUILTIN_PER_PERSON ${perPersonLit.length} chars, BUILTIN_DATA ${dataLit.length} chars`);
