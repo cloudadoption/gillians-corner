@@ -741,15 +741,15 @@ let sortedForChart=[];
 
 function getView(d){
   const useMulti=activeMulti==='multi';
-  if(activeCust==='all'){
-    if(useMulti){const count=d.multi_total;if(!count)return null;const accounts=[...new Set(Object.values(d.multi_by_region).flatMap(r=>r.accounts))].sort();return{count,accounts};}
-    if(d.total===0)return{count:0,accounts:[]};
-    const accounts=[...new Set(Object.values(d.by_region).flatMap(r=>r.accounts))].sort();
-    return{count:d.total,accounts};
+  let meetings=perPersonMeetings[d.name]||[];
+  if(activeCust!=='all') meetings=meetings.filter(m=>m.region===activeCust);
+  if(useMulti) meetings=meetings.filter(m=>m.summit_attendees&&m.summit_attendees.length>1);
+  if(!meetings.length){
+    if(activeCust!=='all'||useMulti) return null;
+    return{count:0,accounts:[]};
   }
-  if(useMulti){const r=d.multi_by_region[activeCust];if(!r||!r.count)return null;return{count:r.count,accounts:r.accounts};}
-  const r=d.by_region[activeCust];if(!r)return null;
-  return{count:r.count,accounts:r.accounts};
+  const accounts=[...new Set(meetings.map(m=>m.account).filter(Boolean))].sort();
+  return{count:meetings.length,accounts};
 }
 
 function getFiltered(){
